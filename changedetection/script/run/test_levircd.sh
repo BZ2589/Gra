@@ -1,6 +1,6 @@
-python script/infer_MambaBCD.py  --dataset 'LEVIR-CD' \
+python changedetection/script/infer_MambaBCD.py  --dataset 'LEVIR-CD' \
                                  --model_type 'baseline_tiny_baseline' \
-                                 --test_dataset_path './data/LEVIR-CD/test' \
+                                 --test_dataset_path '/home/z/dataset/LEVIR-CD-1024/test' \
                                  --decoder_depths 4 \
                                  --if_visible 'gray' \
                                  --cfg './changedetection/configs/vssm1/vssm_small_224.yaml' \

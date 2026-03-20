@@ -191,7 +191,7 @@ class Trainer(object):
 
 def main():
     parser = argparse.ArgumentParser(description="Training on SYSU/LEVIR-CD/WHU-CD/DSIFN-CD dataset")
-    parser.add_argument('--cfg', type=str, default='/home/songjian/project/MambaCD/VMamba/classification/configs/vssm1/vssm_base_224.yaml')
+    parser.add_argument('--cfg', type=str, default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'configs', 'vssm1', 'vssm_base_224.yaml'))
     parser.add_argument(
         "--opts",
         help="Modify config options by adding 'KEY VALUE' pairs. ",
@@ -199,11 +199,11 @@ def main():
         nargs='+',
     )
     parser.add_argument('--pretrained_weight_path', type=str)
-    parser.add_argument('--dataset', type=str, default='SYSU')
+    parser.add_argument('--dataset', type=str, default='LEVIR-CD')
     parser.add_argument('--type', type=str, default='train')
-    parser.add_argument('--train_dataset_path', type=str, default='/home/songjian/project/datasets/SYSU/train')
+    parser.add_argument('--train_dataset_path', type=str, default='/home/z/dataset/LEVIR-CD-1024/train')
     # parser.add_argument('--train_data_list_path', type=str, default='/home/songjian/project/datasets/SYSU/train_list.txt')
-    parser.add_argument('--test_dataset_path', type=str, default='/home/songjian/project/datasets/SYSU/test')
+    parser.add_argument('--test_dataset_path', type=str, default='/home/z/dataset/LEVIR-CD-1024/test')
     parser.add_argument('--decoder_depths', type=int, default=4)
     # parser.add_argument('--test_data_list_path', type=str, default='/home/songjian/project/datasets/SYSU/test_list.txt')
     parser.add_argument('--shuffle', type=bool, default=True)
