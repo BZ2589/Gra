@@ -47,3 +47,23 @@ kernels/selective_scan/test_selective_scan_speed.py
 kernels/selective_scan/test_selective_scan_easy.py
 kernels/selective_scan/ssmtriton.py
 test.sh
+
+
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# C++ / CUDA Build artifacts
+build/
+kernels/selective_scan/build/
+kernels/selective_scan/dist/
+kernels/selective_scan/*.egg-info/
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

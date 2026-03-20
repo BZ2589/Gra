@@ -1,14 +1,20 @@
-torch==2.0.1
-torchvision==0.15.2
-torchaudio==2.0.2
-packaging
-triton
-timm==0.4.12
-pytest 
-chardet 
-yacs 
-termcolor
-submitit 
-tensorboardX
+# 核心深度学习框架（建议根据服务器 CUDA 版本单独安装，这里仅作记录）
+# torch>=2.0.0
+# torchvision
+
+# 模型与网络结构依赖
+timm
+einops
+transformers
+scipy
+
+# 基础辅助库
 fvcore
-seaborn
+yacs
+
+# CUDA 算子编译相关
+ninja
+packaging
+
+# 加速库（仅 Linux 支持，强烈建议在服务器安装）
+triton

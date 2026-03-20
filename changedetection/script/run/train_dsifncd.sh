@@ -4,8 +4,8 @@ python script/train_MambaBCD.py --dataset 'DSIFN-CD' \
                                 --max_iters 800000 \
                                 --model_type baseline_base_dsifn_kaiming_init_loss_dropout_valid-consine_2per \
                                 --model_param_path 'changedetection/saved_models' \
-                                --train_dataset_path '/home/majiancong/data/DSIFN-CD/train' \
-                                --test_dataset_path '/home/majiancong/data/DSIFN-CD/test' \
-                                --cfg '/home/majiancong/MambaCD/changedetection/configs/vssm1/vssm_base_224.yaml' \
+                                --train_dataset_path './data/DSIFN-CD/train' \
+                                --test_dataset_path './data/DSIFN-CD/test' \
+                                --cfg './changedetection/configs/vssm1/vssm_base_224.yaml' \
                                 --decoder_depths 4 \
-                                --pretrained_weight_path '/home/majiancong/MambaCD/changedetection/vssm_base_0229_ckpt_epoch_237.pth' \
+                                --pretrained_weight_path './changedetection/vssm_base_0229_ckpt_epoch_237.pth' \

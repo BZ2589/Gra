@@ -3,11 +3,11 @@ import torch.nn.functional as F
 import numpy as np
 import torch
 import torch.nn as nn
-from MambaCD.changedetection.models.Mamba_backbone import Backbone_VSSM
+from changedetection.models.Mamba_backbone import Backbone_VSSM
 # from thop import profile
 # from transformer import 
-from transformers import SegformerFeatureExtractor, SegformerForSemanticSegmentation
-from MambaCD.classification.models.vmamba import VSSM, LayerNorm2d, VSSBlock, Permute
+from transformers import SegformerImageProcessor, SegformerForSemanticSegmentation
+from classification.models.vmamba import VSSM, LayerNorm2d, VSSBlock, Permute
 import os
 import time
 import math
@@ -15,7 +15,7 @@ import copy
 from functools import partial
 from typing import Optional, Callable, Any
 from collections import OrderedDict
-from MambaCD.changedetection.models.MDP import Mamba_Decoder_Pyramid
+from changedetection.models.MDP import Mamba_Decoder_Pyramid
 # import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -37,7 +37,7 @@ class SwinFPN(nn.Module):
         # print(timm.models.create_model('swin_base_patch4_window7_224').default_cfg)
         # self.backbone = timm.create_model('mit_b0', pretrained=True, features_only=True)
         # 加载预训练的 Segformer 模型 (基于 MIT-B0)
-        self.backbone = SegformerFeatureExtractor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
+        self.backbone = SegformerImageProcessor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
         # self.backbone = SegformerForSemanticSegmentation.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
         # self.backbone = timm.create_model('vit_small_patch16_224', pretrained=True,num_classes=10, features_only=True,global_pool='')
         self.dims=dim

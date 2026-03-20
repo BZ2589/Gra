@@ -18,8 +18,13 @@ DropPath.__repr__ = lambda self: f"timm.DropPath({self.drop_prob})"
 # triton cross scan, 2x speed than pytorch implementation =========================
 try:
     from .csm_triton import CrossScanTriton, CrossMergeTriton, CrossScanTriton1b1
-except:
-    from csm_triton import CrossScanTriton, CrossMergeTriton, CrossScanTriton1b1
+except ImportError:
+    try:
+        from csm_triton import CrossScanTriton, CrossMergeTriton, CrossScanTriton1b1
+    except ImportError:
+        CrossScanTriton = None
+        CrossMergeTriton = None
+        CrossScanTriton1b1 = None
 
 # pytorch cross scan =============
 class CrossScan(torch.autograd.Function):
@@ -135,23 +140,25 @@ class CrossMerge_Ab_1direction(torch.autograd.Function):
 try:
     import selective_scan_cuda_oflex
 except Exception as e:
-    ...
-    # print(f"WARNING: can not import selective_scan_cuda_oflex.", flush=True)
-    # print(e, flush=True)
+    selective_scan_cuda_oflex = None
 
 try:
     import selective_scan_cuda_core
 except Exception as e:
-    ...
-    # print(f"WARNING: can not import selective_scan_cuda_core.", flush=True)
-    # print(e, flush=True)
+    selective_scan_cuda_core = None
 
 try:
     import selective_scan_cuda
 except Exception as e:
-    ...
-    # print(f"WARNING: can not import selective_scan_cuda.", flush=True)
-    # print(e, flush=True)
+    selective_scan_cuda = None
+
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../kernels/selective_scan')))
+try:
+    from test_selective_scan import selective_scan_ref_v2
+except Exception:
+    selective_scan_ref_v2 = None
 
 
 def check_nan_inf(tag: str, x: torch.Tensor, enable=True):
@@ -252,13 +259,18 @@ class SelectiveScanMamba(torch.autograd.Function):
     @torch.cuda.amp.custom_fwd
     def forward(ctx, u, delta, A, B, C, D=None, delta_bias=None, delta_softplus=False, nrows=1, backnrows=1, oflex=True):
         ctx.delta_softplus = delta_softplus
-        out, x, *rest = selective_scan_cuda.fwd(u, delta, A, B, C, D, None, delta_bias, delta_softplus)
-        ctx.save_for_backward(u, delta, A, B, C, D, delta_bias, x)
+        if selective_scan_cuda is None:
+            out = selective_scan_ref_v2(u, delta, A, B, C, D, None, delta_bias, delta_softplus)
+        else:
+            out, x, *rest = selective_scan_cuda.fwd(u, delta, A, B, C, D, None, delta_bias, delta_softplus)
+            ctx.save_for_backward(u, delta, A, B, C, D, delta_bias, x)
         return out
     
     @staticmethod
     @torch.cuda.amp.custom_bwd
     def backward(ctx, dout, *args):
+        if selective_scan_cuda is None:
+            raise NotImplementedError("Backward pass for selective_scan_ref is not implemented in custom Function.")
         u, delta, A, B, C, D, delta_bias, x = ctx.saved_tensors
         if dout.stride(-1) != 1:
             dout = dout.contiguous()
@@ -369,7 +381,10 @@ def cross_selective_scan(
             backnrows = 1
 
     def selective_scan(u, delta, A, B, C, D=None, delta_bias=None, delta_softplus=True):
-        return SelectiveScan.apply(u, delta, A, B, C, D, delta_bias, delta_softplus, nrows, backnrows, ssoflex)
+        if selective_scan_cuda is None and selective_scan_cuda_core is None and selective_scan_cuda_oflex is None:
+            return selective_scan_ref_v2(u, delta, A, B, C, D, None, delta_bias, delta_softplus)
+        else:
+            return SelectiveScan.apply(u, delta, A, B, C, D, delta_bias, delta_softplus, nrows, backnrows, ssoflex)
     
     if (not dt_low_rank):
         x_dbl = F.conv1d(x.view(B, -1, L), x_proj_weight.view(-1, D, 1), bias=(x_proj_bias.view(-1) if x_proj_bias is not None else None), groups=K)
