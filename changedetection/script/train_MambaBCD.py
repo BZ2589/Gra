@@ -100,7 +100,8 @@ class Trainer(object):
             output.write(f'best round:{best_round}\n best iter: 0')
         
         train_enumerator = enumerate(self.train_data_loader)
-        for _ in tqdm(range(elem_num)):
+        pbar = tqdm(range(elem_num), desc="Training")
+        for _ in pbar:
             itera, data = train_enumerator.__next__()
             pre_change_imgs, post_change_imgs, labels, _ = data
 
@@ -126,8 +127,9 @@ class Trainer(object):
             self.optim.step()
             
             if (itera + 1) % 10 == 0:
-                print(f'iter is {itera + 1}, overall loss is {final_loss}')
+                pbar.set_postfix({'loss': f'{final_loss.item():.4f}'})
                 if (itera + 1) % 500 == 0:
+                    print(f'\n--- Validating at iter {itera + 1} ---')
                     self.deep_model.eval()
                     rec, pre, oa, f1_score, iou, kc = self.validation(iter=itera)
                     if kc > best_kc:
