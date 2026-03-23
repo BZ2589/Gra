@@ -1,7 +1,7 @@
-python changedetection/script/train_MambaBCD.py --dataset 'LEVIR-CD' \
-                                --batch_size 2 \
+CUDA_VISIBLE_DEVICES=0 python changedetection/script/train_MambaBCD.py --dataset 'LEVIR-CD' \
+                                --batch_size 8 \
                                 --crop_size 256 \
-                                --max_iters 10 \
+                                --max_iters 800000 \
                                 --model_type baseline_tiny_levir_drop=0 \
                                 --model_param_path 'changedetection/saved_models' \
                                 --train_dataset_path '/home/z/dataset/LEVIR-CD-1024/train' \
