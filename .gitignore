@@ -67,3 +67,4 @@ kernels/selective_scan/*.egg-info/
 .idea/
 .DS_Store
 Thumbs.db
+changedetection/saved_models/
