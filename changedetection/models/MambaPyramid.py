@@ -194,7 +194,7 @@ class CoSelectiveScan2D(nn.Module):
         y_fused = y0 + y1 + y2 + y3
         y_fused = y_fused.permute(0, 2, 3, 1)
         y_fused = self.out_norm(y_fused)
-        return self.out_proj(y_fused).permute(0, 3, 1, 2)
+        return y_fused.permute(0, 3, 1, 2)
 
     def forward(self, x1: torch.Tensor, x2: torch.Tensor):
         x1_proj = self.in_proj(x1.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
@@ -211,6 +211,10 @@ class CoSelectiveScan2D(nn.Module):
         
         out1 = out1 * self.act(x1_res)
         out2 = out2 * self.act(x2_res)
+        
+        out1 = self.out_proj(out1.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+        out2 = self.out_proj(out2.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+        
         return out1, out2
 
 class CoTemporalVSSBlock(nn.Module):
