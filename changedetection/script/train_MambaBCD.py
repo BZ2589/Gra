@@ -125,9 +125,9 @@ class Trainer(object):
             final_loss.backward()
             self.optim.step()
             
-            if (itera + 1) % 1 == 0:
+            if (itera + 1) % 10 == 0:
                 print(f'iter is {itera + 1}, overall loss is {final_loss}')
-                if (itera + 1) % 5 == 0:
+                if (itera + 1) % 500 == 0:
                     self.deep_model.eval()
                     rec, pre, oa, f1_score, iou, kc = self.validation(iter=itera)
                     if kc > best_kc:
