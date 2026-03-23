@@ -67,4 +67,13 @@ kernels/selective_scan/*.egg-info/
 .idea/
 .DS_Store
 Thumbs.db
+<<<<<<< HEAD
 changedetection/saved_models/
+=======
+
+.cache/
+
+# Hugging Face downloaded weights (large files)
+changedetection/pretrained_weight/model.safetensors
+*.pth
+*.safetensors
