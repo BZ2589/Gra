@@ -27,7 +27,11 @@ class Trainer(object):
         self.train_data_loader = make_data_loader(args)
 
         self.evaluator = Evaluator(num_class=2)
-        self.writer = SummaryWriter(log_dir=f"./logs/{self.args.model_type}")
+        
+        # Add run_id support for tracing specific runs
+        self.run_id = args.run_name if args.run_name else (args.model_type + '_' + str(time.time()))
+        self.writer = SummaryWriter(log_dir=f"./logs/{args.dataset}/{self.run_id}")
+        self.csv_log_path = None # Will be initialized in training
         self.deep_model = MambaPyramid(
             pretrained=args.pretrained_weight_path,
             patch_size=config.MODEL.VSSM.PATCH_SIZE, 
@@ -63,8 +67,7 @@ class Trainer(object):
             ) 
         
         self.deep_model = self.deep_model.cuda()
-        self.model_save_path = os.path.join(args.model_param_path, args.dataset,
-                                            args.model_type + '_' + str(time.time()))
+        self.model_save_path = os.path.join(args.model_param_path, args.dataset, self.run_id)
         self.lr = args.learning_rate
         self.epoch = args.max_iters // args.batch_size
         torch.random.manual_seed(3407)
@@ -88,7 +91,7 @@ class Trainer(object):
                                  weight_decay=args.weight_decay)
         self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
                         self.optim,               # 优化器
-                        T_max=10000,             # 学习率下限
+                        T_max=args.max_iters,     # 修改：学习率下限对齐总迭代次数，避免训练后期出现震荡
                     )
 
     def training(self):
@@ -96,6 +99,14 @@ class Trainer(object):
         best_round = []
         torch.cuda.empty_cache()
         elem_num = len(self.train_data_loader)
+        
+        # Initialize CSV log file
+        import csv
+        self.csv_log_path = os.path.join(self.model_save_path, 'validation_metrics.csv')
+        with open(self.csv_log_path, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(['Iteration', 'Recall', 'Precision', 'OA', 'F1_Score', 'IoU', 'Kappa'])
+            
         with open(os.path.join(self.model_save_path,'result.txt'),'w') as output:
             output.write(f'best round:{best_round}\n best iter: 0')
         
@@ -186,6 +197,14 @@ class Trainer(object):
         self.writer.add_scalar(tag="f1-score",scalar_value=f1_score,global_step=iter+1)
         self.writer.add_scalar(tag="kc",scalar_value=kc,global_step=iter+1)
         self.writer.add_scalar(tag="IoU",scalar_value=iou,global_step=iter+1)
+        
+        # Save metrics to CSV
+        import csv
+        if hasattr(self, 'csv_log_path') and self.csv_log_path:
+            with open(self.csv_log_path, mode='a', newline='') as file:
+                writer = csv.writer(file)
+                writer.writerow([iter+1, rec, pre, oa, f1_score, iou, kc])
+                
         print(f'Racall rate is {rec}, Precision rate is {pre}, OA is {oa}, '
               f'F1 score is {f1_score}, IoU is {iou}, Kappa coefficient is {kc}')
         return rec, pre, oa, f1_score, iou, kc
@@ -193,6 +212,7 @@ class Trainer(object):
 
 def main():
     parser = argparse.ArgumentParser(description="Training on SYSU/LEVIR-CD/WHU-CD/DSIFN-CD dataset")
+    parser.add_argument('--run_name', type=str, default=None, help="Specific name for this run to easily trace it later (e.g., train001_levircd). If not set, a timestamp will be used.")
     parser.add_argument('--cfg', type=str, default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'configs', 'vssm1', 'vssm_base_224.yaml'))
     parser.add_argument(
         "--opts",
