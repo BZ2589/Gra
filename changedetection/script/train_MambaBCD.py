@@ -1,24 +1,24 @@
 import sys
-sys.path.append('/home/majiancong/')
-import argparse
 import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+import argparse
 import time
 from thop import profile
 import numpy as np
 import imageio
 from random import randint
-from MambaCD.changedetection.configs.config import get_config
+from changedetection.configs.config import get_config
 from torch.utils.tensorboard import SummaryWriter
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from MambaCD.changedetection.datasets.make_data_loader import ChangeDetectionDatset, make_data_loader
-from MambaCD.changedetection.utils_func.metrics import Evaluator
-from MambaCD.changedetection.models.MambaPyramid import MambaPyramid
+from changedetection.datasets.make_data_loader import ChangeDetectionDatset, make_data_loader
+from changedetection.utils_func.metrics import Evaluator
+from changedetection.models.MambaPyramid import MambaPyramid
 
-import MambaCD.changedetection.utils_func.lovasz_loss as L
+import changedetection.utils_func.lovasz_loss as L
 class Trainer(object):
     def __init__(self, args):
         self.args = args
@@ -191,7 +191,7 @@ class Trainer(object):
 
 def main():
     parser = argparse.ArgumentParser(description="Training on SYSU/LEVIR-CD/WHU-CD/DSIFN-CD dataset")
-    parser.add_argument('--cfg', type=str, default='/home/songjian/project/MambaCD/VMamba/classification/configs/vssm1/vssm_base_224.yaml')
+    parser.add_argument('--cfg', type=str, default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'configs', 'vssm1', 'vssm_base_224.yaml'))
     parser.add_argument(
         "--opts",
         help="Modify config options by adding 'KEY VALUE' pairs. ",

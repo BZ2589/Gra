@@ -3,11 +3,11 @@ import torch.nn.functional as F
 import numpy as np
 import torch
 import torch.nn as nn
-from MambaCD.changedetection.models.Mamba_backbone import Backbone_VSSM
+from changedetection.models.Mamba_backbone import Backbone_VSSM
 # from thop import profile
 # from transformer import 
 from transformers import SegformerFeatureExtractor, SegformerForSemanticSegmentation
-from MambaCD.classification.models.vmamba import VSSM, LayerNorm2d, VSSBlock, Permute
+from classification.models.vmamba import VSSM, LayerNorm2d, VSSBlock, Permute
 import os
 import time
 import math
@@ -15,7 +15,7 @@ import copy
 from functools import partial
 from typing import Optional, Callable, Any
 from collections import OrderedDict
-from MambaCD.changedetection.models.MDP import Mamba_Decoder_Pyramid
+from changedetection.models.MDP import Mamba_Decoder_Pyramid
 # import torch
 import torch.nn as nn
 import torch.nn.functional as F

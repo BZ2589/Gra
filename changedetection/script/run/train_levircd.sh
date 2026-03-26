@@ -1,11 +1,11 @@
-python script/train_MambaBCD.py --dataset 'LEVIR-CD' \
+CUDA_VISIBLE_DEVICES=0 python changedetection/script/train_MambaBCD.py --dataset 'LEVIR-CD' \
                                 --batch_size 8 \
                                 --crop_size 256 \
                                 --max_iters 800000 \
                                 --model_type baseline_tiny_levir_drop=0 \
                                 --model_param_path 'changedetection/saved_models' \
-                                --train_dataset_path '/home/majiancong/data/LEVIR-CD/train' \
-                                --test_dataset_path '/home/majiancong/data/LEVIR-CD/test' \
+                                --train_dataset_path '/home/z/dataset/LEVIR-CD-1024/train' \
+                                --test_dataset_path '/home/z/dataset/LEVIR-CD-1024/test' \
                                 --decoder_depth 4 \
-                                --cfg '/home/majiancong/MambaCD/changedetection/configs/vssm1/vssm_base_224.yaml' \
-                                --pretrained_weight_path '/home/majiancong/MambaCD/changedetection/vssm_base_0229_ckpt_epoch_237.pth' \
+                                --cfg './changedetection/configs/vssm1/vssm_base_224.yaml' \
+                                --pretrained_weight_path './changedetection/pretrained_weight/model.safetensors' \
