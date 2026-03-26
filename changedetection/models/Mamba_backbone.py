@@ -59,6 +59,14 @@ class Backbone_VSSM(VSSM):
                     k = k.replace('dt_projs.weight', 'dt_projs_weight')
                 if 'x_proj.weight' in k:
                     k = k.replace('x_proj.weight', 'x_proj_weight')
+                if 'patch_embeddings.projection.0' in k:
+                    k = k.replace('patch_embeddings.projection.0', 'patch_embed.0')
+                if 'patch_embeddings.projection.1' in k:
+                    k = k.replace('patch_embeddings.projection.1', 'patch_embed.2')
+                if 'patch_embeddings.projection.3' in k:
+                    k = k.replace('patch_embeddings.projection.3', 'patch_embed.5')
+                if 'patch_embeddings.projection.4' in k:
+                    k = k.replace('patch_embeddings.projection.4', 'patch_embed.7')
                 
                 new_state_dict[k] = v
             state_dict = new_state_dict
