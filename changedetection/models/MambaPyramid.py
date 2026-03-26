@@ -6,7 +6,11 @@ import torch.nn as nn
 from changedetection.models.Mamba_backbone import Backbone_VSSM
 # from thop import profile
 # from transformer import 
-from transformers import SegformerFeatureExtractor, SegformerForSemanticSegmentation
+try:
+    from transformers import SegformerFeatureExtractor, SegformerForSemanticSegmentation
+except ImportError:
+    from transformers import SegformerImageProcessor as SegformerFeatureExtractor
+    from transformers import SegformerForSemanticSegmentation
 from classification.models.vmamba import VSSM, LayerNorm2d, VSSBlock, Permute
 import os
 import time
