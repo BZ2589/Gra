@@ -74,7 +74,8 @@ class Trainer(object):
         if args.resume is not None:
             if not os.path.isfile(args.resume):
                 raise RuntimeError("=> no checkpoint found at '{}'".format(args.resume))
-            checkpoint = torch.load(args.resume)
+            # 添加 weights_only=False 以兼容 PyTorch 2.6 加载 safetensors
+            checkpoint = torch.load(args.resume, map_location='cuda', weights_only=False)
             model_dict = {}
             state_dict = self.deep_model.state_dict()
             for k, v in checkpoint.items():
@@ -198,7 +199,7 @@ def main():
         default=None,
         nargs='+',
     )
-    parser.add_argument('--pretrained_weight_path', type=str)
+    parser.add_argument('--pretrained_weight_path', type=str, help='path to pretrained weights')
     parser.add_argument('--dataset', type=str, default='SYSU')
     parser.add_argument('--type', type=str, default='train')
     parser.add_argument('--train_dataset_path', type=str, default='/home/songjian/project/datasets/SYSU/train')

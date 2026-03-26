@@ -295,6 +295,19 @@ class SelectiveScanMamba(torch.autograd.Function):
     @staticmethod
     @torch.cuda.amp.custom_fwd
     def forward(ctx, u, delta, A, B, C, D=None, delta_bias=None, delta_softplus=False, nrows=1, backnrows=1, oflex=True):
+        if not u.is_contiguous():
+            u = u.contiguous()
+        if not delta.is_contiguous():
+            delta = delta.contiguous()
+        if not B.is_contiguous():
+            B = B.contiguous()
+        if not C.is_contiguous():
+            C = C.contiguous()
+        if D is not None and not D.is_contiguous():
+            D = D.contiguous()
+        if delta_bias is not None and not delta_bias.is_contiguous():
+            delta_bias = delta_bias.contiguous()
+            
         ctx.delta_softplus = delta_softplus
         out, x, *rest = selective_scan_cuda.fwd(u, delta, A, B, C, D, None, delta_bias, delta_softplus)
         ctx.save_for_backward(u, delta, A, B, C, D, delta_bias, x)
@@ -318,6 +331,18 @@ class SelectiveScanCore(torch.autograd.Function):
     @staticmethod
     @torch.cuda.amp.custom_fwd
     def forward(ctx, u, delta, A, B, C, D=None, delta_bias=None, delta_softplus=False, nrows=1, backnrows=1, oflex=True):
+        if not u.is_contiguous():
+            u = u.contiguous()
+        if not delta.is_contiguous():
+            delta = delta.contiguous()
+        if not B.is_contiguous():
+            B = B.contiguous()
+        if not C.is_contiguous():
+            C = C.contiguous()
+        if D is not None and not D.is_contiguous():
+            D = D.contiguous()
+        if delta_bias is not None and not delta_bias.is_contiguous():
+            delta_bias = delta_bias.contiguous()
         ctx.delta_softplus = delta_softplus
         out, x, *rest = selective_scan_cuda_core.fwd(u, delta, A, B, C, D, delta_bias, delta_softplus, 1)
         ctx.save_for_backward(u, delta, A, B, C, D, delta_bias, x)
@@ -339,6 +364,18 @@ class SelectiveScanOflex(torch.autograd.Function):
     @staticmethod
     @torch.cuda.amp.custom_fwd
     def forward(ctx, u, delta, A, B, C, D=None, delta_bias=None, delta_softplus=False, nrows=1, backnrows=1, oflex=True):
+        if not u.is_contiguous():
+            u = u.contiguous()
+        if not delta.is_contiguous():
+            delta = delta.contiguous()
+        if not B.is_contiguous():
+            B = B.contiguous()
+        if not C.is_contiguous():
+            C = C.contiguous()
+        if D is not None and not D.is_contiguous():
+            D = D.contiguous()
+        if delta_bias is not None and not delta_bias.is_contiguous():
+            delta_bias = delta_bias.contiguous()
         ctx.delta_softplus = delta_softplus
         out, x, *rest = selective_scan_cuda_oflex.fwd(u, delta, A, B, C, D, delta_bias, delta_softplus, 1, oflex)
         ctx.save_for_backward(u, delta, A, B, C, D, delta_bias, x)
@@ -1737,9 +1774,16 @@ class Backbone_VSSM(VSSM):
             return
         
         try:
-            _ckpt = torch.load(open(ckpt, "rb"), map_location=torch.device("cpu"))
+            if ckpt.endswith('.safetensors'):
+                from safetensors.torch import load_file
+                _ckpt = load_file(ckpt)
+                state_dict = _ckpt.get(key, _ckpt) if isinstance(_ckpt, dict) else _ckpt
+            else:
+                _ckpt = torch.load(open(ckpt, "rb"), map_location=torch.device("cpu"), weights_only=False)
+                state_dict = _ckpt[key] if key in _ckpt else _ckpt
+                
             print(f"Successfully load ckpt {ckpt}")
-            incompatibleKeys = self.load_state_dict(_ckpt[key], strict=False)
+            incompatibleKeys = self.load_state_dict(state_dict, strict=False)
             print(incompatibleKeys)        
         except Exception as e:
             print(f"Failed loading checkpoint form {ckpt}: {e}")

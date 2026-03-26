@@ -36,9 +36,19 @@ class Backbone_VSSM(VSSM):
             return
         
         try:
-            _ckpt = torch.load(open(ckpt, "rb"), map_location=torch.device("cpu"))
+            if ckpt.endswith('.safetensors'):
+                from safetensors.torch import load_file
+                _ckpt = load_file(ckpt)
+                # safetensors usually doesn't have a nested 'model' key for the state dict, it IS the state dict
+                # but if it does, we can try to extract it
+                state_dict = _ckpt.get(key, _ckpt) if isinstance(_ckpt, dict) else _ckpt
+            else:
+                # 兼容 PyTorch 2.6
+                _ckpt = torch.load(open(ckpt, "rb"), map_location=torch.device("cpu"), weights_only=False)
+                state_dict = _ckpt[key] if key in _ckpt else _ckpt
+                
             print(f"Successfully load ckpt {ckpt}")
-            incompatibleKeys = self.load_state_dict(_ckpt[key], strict=False)
+            incompatibleKeys = self.load_state_dict(state_dict, strict=False)
             print(incompatibleKeys)        
         except Exception as e:
             print(f"Failed loading checkpoint form {ckpt}: {e}")
