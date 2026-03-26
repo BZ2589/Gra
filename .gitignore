@@ -67,7 +67,7 @@ kernels/selective_scan/*.egg-info/
 .idea/
 .DS_Store
 Thumbs.db
-changedetection/saved_models/
+# changedetection/saved_models/save
 
 .cache/
 
@@ -75,3 +75,8 @@ changedetection/saved_models/
 changedetection/pretrained_weight/model.safetensors
 *.pth
 *.safetensors
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*$py.class
