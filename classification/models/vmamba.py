@@ -1805,6 +1805,12 @@ class Backbone_VSSM(VSSM):
                 if 'patch_embeddings.projection.4' in k:
                     k = k.replace('patch_embeddings.projection.4', 'patch_embed.7')
                 
+                # downsample
+                if 'downsample.down' in k:
+                    k = k.replace('downsample.down', 'downsample.1')
+                if 'downsample.norm' in k:
+                    k = k.replace('downsample.norm', 'downsample.3')
+                
                 new_state_dict[k] = v
             state_dict = new_state_dict
                 
