@@ -1213,6 +1213,8 @@ class SS2D(nn.Module):
         )
 
     def forwardv2(self, x: torch.Tensor, **kwargs):
+        if not x.is_contiguous():
+            x = x.contiguous()
         with_dconv = (self.d_conv > 1)
         x = self.in_proj(x)
         if not self.disable_z:
@@ -1781,6 +1783,22 @@ class Backbone_VSSM(VSSM):
             else:
                 _ckpt = torch.load(open(ckpt, "rb"), map_location=torch.device("cpu"), weights_only=False)
                 state_dict = _ckpt[key] if key in _ckpt else _ckpt
+                
+            # 重命名键值，以匹配模型的 state_dict
+            new_state_dict = {}
+            for k, v in state_dict.items():
+                if k.startswith('vmamba.'):
+                    k = k[7:]
+                elif k.startswith('model.'):
+                    k = k[6:]
+                
+                if 'dt_projs.weight' in k:
+                    k = k.replace('dt_projs.weight', 'dt_projs_weight')
+                if 'x_proj.weight' in k:
+                    k = k.replace('x_proj.weight', 'x_proj_weight')
+                
+                new_state_dict[k] = v
+            state_dict = new_state_dict
                 
             print(f"Successfully load ckpt {ckpt}")
             incompatibleKeys = self.load_state_dict(state_dict, strict=False)

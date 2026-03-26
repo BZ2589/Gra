@@ -1,5 +1,5 @@
 CUDA_VISIBLE_DEVICES=0 python changedetection/script/train_MambaBCD.py --dataset 'LEVIR-CD' \
-                                --batch_size 8 \
+                                --batch_size 2 \
                                 --crop_size 256 \
                                 --max_iters 800000 \
                                 --model_type baseline_tiny_levir_drop=0 \
