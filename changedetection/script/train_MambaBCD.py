@@ -164,7 +164,7 @@ class Trainer(object):
                 post_change_imgs = post_change_imgs.cuda().float()
                 labels = labels.cuda().long()
                 
-                with torch.cuda.amp.autocast():
+                with torch.amp.autocast('cuda'):
                     output_1,ds_feature = self.deep_model(pre_change_imgs, post_change_imgs)              
                     ce_loss_1 = F.cross_entropy(output_1, labels, ignore_index=255)
                     ce_loss_ds = 0
