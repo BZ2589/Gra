@@ -106,10 +106,12 @@ def lovasz_hinge_flat(logits, labels):
     errors_sorted, perm = torch.sort(errors, dim=0, descending=True)
     perm = perm.data
     gt_sorted = labels[perm]
-    grad = lovasz_grad(gt_sorted)
-    errors_sorted = F.relu(errors_sorted).float()
-    grad = Variable(grad).float()
-    loss = torch.dot(errors_sorted, grad)
+    
+    # Same trick for binary loss
+    errors_sorted_f32 = F.relu(errors_sorted).float()
+    grad_f32 = lovasz_grad(gt_sorted).float()
+    
+    loss = torch.dot(errors_sorted_f32, Variable(grad_f32))
     return loss
 
 
@@ -197,9 +199,12 @@ def lovasz_softmax_flat(probas, labels, classes='present'):
         errors_sorted, perm = torch.sort(errors, 0, descending=True)
         perm = perm.data
         fg_sorted = fg[perm]
-        errors_sorted = errors_sorted.float()
-        grad = Variable(lovasz_grad(fg_sorted)).float()
-        losses.append(torch.dot(errors_sorted, grad))
+        
+        # Move variables to float32 safely outside autograd if needed, then re-wrap
+        errors_sorted_f32 = errors_sorted.float()
+        grad_f32 = lovasz_grad(fg_sorted).float()
+        
+        losses.append(torch.dot(errors_sorted_f32, Variable(grad_f32)))
     return mean(losses)
 
 

@@ -118,8 +118,9 @@ class Trainer(object):
                 lovasz_loss = 0
                 for index in range(len(ds_feature)):
                     ce_loss_ds += F.cross_entropy(ds_feature[index], labels, ignore_index=255)*index/4
-                    lovasz_loss += L.lovasz_softmax(F.softmax(ds_feature[index], dim=1), labels, ignore=255)*index/4
-                lovasz_loss += L.lovasz_softmax(F.softmax(output_1, dim=1), labels, ignore=255)
+                    # 强制在计算 lovasz_loss 前转为 float32，避免底层的 torch.dot 在 fp16 下崩溃
+                    lovasz_loss += L.lovasz_softmax(F.softmax(ds_feature[index].float(), dim=1), labels, ignore=255)*index/4
+                lovasz_loss += L.lovasz_softmax(F.softmax(output_1.float(), dim=1), labels, ignore=255)
                 main_loss = ce_loss_1 + 0.75 * lovasz_loss + ce_loss_ds
                 final_loss = main_loss
                 
@@ -171,8 +172,8 @@ class Trainer(object):
                     lovasz_loss = 0
                     for index in range(len(ds_feature)):
                         ce_loss_ds += F.cross_entropy(ds_feature[index], labels, ignore_index=255)*index/2
-                        lovasz_loss += L.lovasz_softmax(F.softmax(ds_feature[index], dim=1), labels, ignore=255)*index/2
-                    lovasz_loss += L.lovasz_softmax(F.softmax(output_1, dim=1), labels, ignore=255)
+                        lovasz_loss += L.lovasz_softmax(F.softmax(ds_feature[index].float(), dim=1), labels, ignore=255)*index/2
+                    lovasz_loss += L.lovasz_softmax(F.softmax(output_1.float(), dim=1), labels, ignore=255)
                     main_loss = ce_loss_1 + 0.75 * lovasz_loss + ce_loss_ds
                     final_loss = main_loss
                     
