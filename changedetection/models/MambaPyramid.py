@@ -25,7 +25,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint as checkpoint
 from einops import rearrange, repeat
-from timm.models.layers import DropPath, trunc_normal_
+from timm.layers import DropPath, trunc_normal_
 from fvcore.nn import FlopCountAnalysis, flop_count_str, flop_count, parameter_count
 # from Mamba_decoder import ChangeDecoder
 import torchvision.models as models
@@ -88,10 +88,10 @@ class ResNetFPN(nn.Module):
         return [ c2, c3, c4, c5]
 
 # Load a pre-trained ResNet model
-resnet = models.resnet101(pretrained=True)
-# resnet = models.resnet50(pretrained=True)
-# resnet = models.resnet18(pretrained=True)
-# resnet = models.resnet34(pretrained=True)
+resnet = models.resnet101(weights=models.ResNet101_Weights.IMAGENET1K_V1)
+# resnet = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
+# resnet = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
+# resnet = models.resnet34(weights=models.ResNet34_Weights.IMAGENET1K_V1)
 # Create the ResNet-FPN model
 # fpn_model = ResNetFPN(resnet)
 

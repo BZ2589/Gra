@@ -11,7 +11,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint as checkpoint
 from einops import rearrange, repeat
-from timm.models.layers import DropPath, trunc_normal_
+from timm.layers import DropPath, trunc_normal_
 from fvcore.nn import FlopCountAnalysis, flop_count_str, flop_count, parameter_count
 DropPath.__repr__ = lambda self: f"timm.DropPath({self.drop_prob})"
 
@@ -1359,6 +1359,6 @@ class Multiscale_VSSBlock(nn.Module):
 
     def forward(self, input: torch.Tensor):
         if self.use_checkpoint:
-            return checkpoint.checkpoint(self._forward, input)
+            return checkpoint.checkpoint(self._forward, input, use_reentrant=False)
         else:
             return self._forward(input)

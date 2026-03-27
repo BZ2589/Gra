@@ -17,7 +17,7 @@
   warnings.warn(
 /home/z/anaconda3/envs/lh/lib/python3.10/site-packages/torchvision/models/_utils.py:223: UserWarning: Arguments other than a weight enum or `None` for 'weights' are deprecated since 0.13 and may be removed in the future. The current behavior is equivalent to passing `weights=ResNet101_Weights.IMAGENET1K_V1`. You can also use `weights=ResNet101_Weights.DEFAULT` to get the most up-to-date weights.
   warnings.warn(msg)
-/media/z/1d115f79-c4ea-4c62-9376-98541627908c/LH/Gra/changedetection/utils_func/lovasz_loss.py:188: SyntaxWarning: "is" with a literal. Did you mean "=="?
+/media/z/1d115f79-c4ea-4c62-9376-98541627908c/LH/Gra/changedetection/utils_func/lovasz_loss.py:190: SyntaxWarning: "is" with a literal. Did you mean "=="?
   if (classes is 'present' and fg.sum() == 0):
 => merge config from ./changedetection/configs/vssm1/vssm_tiny_224.yaml
 Successfully load ckpt ./changedetection/pretrained_weight/model.safetensors
@@ -26,16 +26,15 @@ _IncompatibleKeys(missing_keys=['outnorm0.weight', 'outnorm0.bias', 'outnorm1.we
   return fn(*args, **kwargs)
   0%|                                                                          | 0/100000 [00:03<?, ?it/s]
 Traceback (most recent call last):
-  File "/media/z/1d115f79-c4ea-4c62-9376-98541627908c/LH/Gra/changedetection/script/train_MambaBCD.py", line 260, in <module>
+  File "/media/z/1d115f79-c4ea-4c62-9376-98541627908c/LH/Gra/changedetection/script/train_MambaBCD.py", line 261, in <module>
     main()
-  File "/media/z/1d115f79-c4ea-4c62-9376-98541627908c/LH/Gra/changedetection/script/train_MambaBCD.py", line 256, in main
+  File "/media/z/1d115f79-c4ea-4c62-9376-98541627908c/LH/Gra/changedetection/script/train_MambaBCD.py", line 257, in main
     trainer.training()
-  File "/media/z/1d115f79-c4ea-4c62-9376-98541627908c/LH/Gra/changedetection/script/train_MambaBCD.py", line 121, in training
-    lovasz_loss += L.lovasz_softmax(F.softmax(ds_feature[index], dim=1), labels, ignore=255)*index/4
-  File "/media/z/1d115f79-c4ea-4c62-9376-98541627908c/LH/Gra/changedetection/utils_func/lovasz_loss.py", line 169, in lovasz_softmax
+  File "/media/z/1d115f79-c4ea-4c62-9376-98541627908c/LH/Gra/changedetection/script/train_MambaBCD.py", line 122, in training
+    lovasz_loss += L.lovasz_softmax(F.softmax(ds_feature[index].float(), dim=1), labels, ignore=255)*index/4
+  File "/media/z/1d115f79-c4ea-4c62-9376-98541627908c/LH/Gra/changedetection/utils_func/lovasz_loss.py", line 171, in lovasz_softmax
     loss = lovasz_softmax_flat(*flatten_probas(probas, labels, ignore), classes=classes)
-  File "/media/z/1d115f79-c4ea-4c62-9376-98541627908c/LH/Gra/changedetection/utils_func/lovasz_loss.py", line 202, in lovasz_softmax_flat
-    losses.append(torch.dot(errors_sorted, grad))
+  File "/media/z/1d115f79-c4ea-4c62-9376-98541627908c/LH/Gra/changedetection/utils_func/lovasz_loss.py", line 207, in lovasz_softmax_flat
+    losses.append(torch.dot(errors_sorted_f32, Variable(grad_f32)))
 RuntimeError: CUDA error: CUBLAS_STATUS_NOT_SUPPORTED when calling `cublasSdot(handle, n, x, incx, y, incy, result)`
 (lh) z@z-System-Product-Name:/media/z/1d115f79-c4ea-4c62-9376-98541627908c/LH/Gra$ 
-

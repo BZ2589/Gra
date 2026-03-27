@@ -111,7 +111,8 @@ def lovasz_hinge_flat(logits, labels):
     errors_sorted_f32 = F.relu(errors_sorted).float()
     grad_f32 = lovasz_grad(gt_sorted).float()
     
-    loss = torch.dot(errors_sorted_f32, Variable(grad_f32))
+    # Use (a * b).sum() instead of torch.dot to avoid CUBLAS_STATUS_NOT_SUPPORTED
+    loss = (errors_sorted_f32 * Variable(grad_f32)).sum()
     return loss
 
 
@@ -187,7 +188,7 @@ def lovasz_softmax_flat(probas, labels, classes='present'):
     class_to_sum = list(range(C)) if classes in ['all', 'present'] else classes
     for c in class_to_sum:
         fg = (labels == c).float() # foreground for class c
-        if (classes is 'present' and fg.sum() == 0):
+        if (classes == 'present' and fg.sum() == 0):
             continue
         if C == 1:
             if len(classes) > 1:
@@ -204,7 +205,8 @@ def lovasz_softmax_flat(probas, labels, classes='present'):
         errors_sorted_f32 = errors_sorted.float()
         grad_f32 = lovasz_grad(fg_sorted).float()
         
-        losses.append(torch.dot(errors_sorted_f32, Variable(grad_f32)))
+        # Use (a * b).sum() instead of torch.dot to avoid CUBLAS_STATUS_NOT_SUPPORTED in fp16/amp context
+        losses.append((errors_sorted_f32 * Variable(grad_f32)).sum())
     return mean(losses)
 
 

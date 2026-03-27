@@ -11,7 +11,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint as checkpoint
 from einops import rearrange, repeat
-from timm.models.layers import DropPath, trunc_normal_
+from timm.layers import DropPath, trunc_normal_
 from fvcore.nn import FlopCountAnalysis, flop_count_str, flop_count, parameter_count
 DropPath.__repr__ = lambda self: f"timm.DropPath({self.drop_prob})"
 
@@ -293,7 +293,7 @@ def print_jit_input_names(inputs):
 # comment all checks if inside cross_selective_scan
 class SelectiveScanMamba(torch.autograd.Function):
     @staticmethod
-    @torch.cuda.amp.custom_fwd
+    @torch.amp.custom_fwd(device_type='cuda')
     def forward(ctx, u, delta, A, B, C, D=None, delta_bias=None, delta_softplus=False, nrows=1, backnrows=1, oflex=True):
         if not u.is_contiguous():
             u = u.contiguous()
@@ -314,7 +314,7 @@ class SelectiveScanMamba(torch.autograd.Function):
         return out
     
     @staticmethod
-    @torch.cuda.amp.custom_bwd
+    @torch.amp.custom_bwd(device_type='cuda')
     def backward(ctx, dout, *args):
         u, delta, A, B, C, D, delta_bias, x = ctx.saved_tensors
         if dout.stride(-1) != 1:
@@ -329,7 +329,7 @@ class SelectiveScanMamba(torch.autograd.Function):
 
 class SelectiveScanCore(torch.autograd.Function):
     @staticmethod
-    @torch.cuda.amp.custom_fwd
+    @torch.amp.custom_fwd(device_type='cuda')
     def forward(ctx, u, delta, A, B, C, D=None, delta_bias=None, delta_softplus=False, nrows=1, backnrows=1, oflex=True):
         if not u.is_contiguous():
             u = u.contiguous()
@@ -349,7 +349,7 @@ class SelectiveScanCore(torch.autograd.Function):
         return out
     
     @staticmethod
-    @torch.cuda.amp.custom_bwd
+    @torch.amp.custom_bwd(device_type='cuda')
     def backward(ctx, dout, *args):
         u, delta, A, B, C, D, delta_bias, x = ctx.saved_tensors
         if dout.stride(-1) != 1:
@@ -362,7 +362,7 @@ class SelectiveScanCore(torch.autograd.Function):
 
 class SelectiveScanOflex(torch.autograd.Function):
     @staticmethod
-    @torch.cuda.amp.custom_fwd
+    @torch.amp.custom_fwd(device_type='cuda')
     def forward(ctx, u, delta, A, B, C, D=None, delta_bias=None, delta_softplus=False, nrows=1, backnrows=1, oflex=True):
         if not u.is_contiguous():
             u = u.contiguous()
@@ -382,7 +382,7 @@ class SelectiveScanOflex(torch.autograd.Function):
         return out
     
     @staticmethod
-    @torch.cuda.amp.custom_bwd
+    @torch.amp.custom_bwd(device_type='cuda')
     def backward(ctx, dout, *args):
         u, delta, A, B, C, D, delta_bias, x = ctx.saved_tensors
         if dout.stride(-1) != 1:
@@ -1439,7 +1439,7 @@ class VSSBlock(nn.Module):
 
     def forward(self, input: torch.Tensor):
         if self.use_checkpoint:
-            return checkpoint.checkpoint(self._forward, input)
+            return checkpoint.checkpoint(self._forward, input, use_reentrant=False)
         else:
             return self._forward(input)
 
