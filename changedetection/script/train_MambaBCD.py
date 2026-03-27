@@ -59,7 +59,7 @@ class Trainer(object):
             downsample_version=config.MODEL.VSSM.DOWNSAMPLE,
             patchembed_version=config.MODEL.VSSM.PATCHEMBED,
             gmlp=config.MODEL.VSSM.GMLP,
-            use_checkpoint=config.TRAIN.USE_CHECKPOINT,
+            use_checkpoint=True,
             ) 
         
         self.deep_model = self.deep_model.cuda()
@@ -91,6 +91,7 @@ class Trainer(object):
                         self.optim,               # 优化器
                         T_max=10000,             # 学习率下限
                     )
+        self.scaler = torch.cuda.amp.GradScaler()
 
     def training(self):
         best_kc = 0.0
@@ -109,22 +110,26 @@ class Trainer(object):
             post_change_imgs = post_change_imgs.cuda()
             labels = labels.cuda().long()
 
-            output_1,ds_feature = self.deep_model(pre_change_imgs, post_change_imgs)
             self.optim.zero_grad()
-            ce_loss_1 = F.cross_entropy(output_1, labels, ignore_index=255)
-            ce_loss_ds = 0
-            lovasz_loss = 0
-            for index in range(len(ds_feature)):
-                ce_loss_ds += F.cross_entropy(ds_feature[index], labels, ignore_index=255)*index/4
-                lovasz_loss += L.lovasz_softmax(F.softmax(ds_feature[index], dim=1), labels, ignore=255)*index/4
-            lovasz_loss += L.lovasz_softmax(F.softmax(output_1, dim=1), labels, ignore=255)
-            main_loss = ce_loss_1 + 0.75 * lovasz_loss + ce_loss_ds
-            final_loss = main_loss
-            self.writer.add_scalar(tag="ce_loss",scalar_value=ce_loss_1,global_step=itera+1)
-            self.writer.add_scalar(tag="ds_loss",scalar_value=ce_loss_ds,global_step=itera+1)
-            self.writer.add_scalar(tag="final_loss",scalar_value=final_loss,global_step=itera+1)
-            final_loss.backward()
-            self.optim.step()
+            with torch.cuda.amp.autocast():
+                output_1,ds_feature = self.deep_model(pre_change_imgs, post_change_imgs)
+                ce_loss_1 = F.cross_entropy(output_1, labels, ignore_index=255)
+                ce_loss_ds = 0
+                lovasz_loss = 0
+                for index in range(len(ds_feature)):
+                    ce_loss_ds += F.cross_entropy(ds_feature[index], labels, ignore_index=255)*index/4
+                    lovasz_loss += L.lovasz_softmax(F.softmax(ds_feature[index], dim=1), labels, ignore=255)*index/4
+                lovasz_loss += L.lovasz_softmax(F.softmax(output_1, dim=1), labels, ignore=255)
+                main_loss = ce_loss_1 + 0.75 * lovasz_loss + ce_loss_ds
+                final_loss = main_loss
+                
+            self.writer.add_scalar(tag="ce_loss",scalar_value=ce_loss_1.item(),global_step=itera+1)
+            self.writer.add_scalar(tag="ds_loss",scalar_value=ce_loss_ds.item() if isinstance(ce_loss_ds, torch.Tensor) else ce_loss_ds,global_step=itera+1)
+            self.writer.add_scalar(tag="final_loss",scalar_value=final_loss.item(),global_step=itera+1)
+            
+            self.scaler.scale(final_loss).backward()
+            self.scaler.step(self.optim)
+            self.scaler.update()
             
             if (itera + 1) % 10 == 0:
                 print(f'iter is {itera + 1}, overall loss is {final_loss}')
@@ -158,24 +163,28 @@ class Trainer(object):
                 pre_change_imgs = pre_change_imgs.cuda().float()
                 post_change_imgs = post_change_imgs.cuda().float()
                 labels = labels.cuda().long()
-                output_1,ds_feature = self.deep_model(pre_change_imgs, post_change_imgs)              
-                ce_loss_1 = F.cross_entropy(output_1, labels, ignore_index=255)
-                ce_loss_ds = 0
-                lovasz_loss = 0
-                for index in range(len(ds_feature)):
-                    ce_loss_ds += F.cross_entropy(ds_feature[index], labels, ignore_index=255)*index/2
-                    lovasz_loss += L.lovasz_softmax(F.softmax(ds_feature[index], dim=1), labels, ignore=255)*index/2
-                lovasz_loss += L.lovasz_softmax(F.softmax(output_1, dim=1), labels, ignore=255)
-                main_loss = ce_loss_1 + 0.75 * lovasz_loss + ce_loss_ds
-                final_loss = main_loss
+                
+                with torch.cuda.amp.autocast():
+                    output_1,ds_feature = self.deep_model(pre_change_imgs, post_change_imgs)              
+                    ce_loss_1 = F.cross_entropy(output_1, labels, ignore_index=255)
+                    ce_loss_ds = 0
+                    lovasz_loss = 0
+                    for index in range(len(ds_feature)):
+                        ce_loss_ds += F.cross_entropy(ds_feature[index], labels, ignore_index=255)*index/2
+                        lovasz_loss += L.lovasz_softmax(F.softmax(ds_feature[index], dim=1), labels, ignore=255)*index/2
+                    lovasz_loss += L.lovasz_softmax(F.softmax(output_1, dim=1), labels, ignore=255)
+                    main_loss = ce_loss_1 + 0.75 * lovasz_loss + ce_loss_ds
+                    final_loss = main_loss
+                    
                 self.scheduler.step()
+                output_1 = output_1.float() # 确保后续转换为 numpy 时是 float32 类型
                 output_1 = output_1.data.cpu().numpy()
                 output_1 = np.argmax(output_1, axis=1)
                 labels = labels.cpu().numpy()
                 self.evaluator.add_batch(labels, output_1)
-                self.writer.add_scalar(tag="ce_loss_validation",scalar_value=ce_loss_1,global_step=iter+1)
-                self.writer.add_scalar(tag="ds_loss_validation",scalar_value=ce_loss_ds,global_step=iter+1)
-                self.writer.add_scalar(tag="final_loss_validation",scalar_value=final_loss,global_step=iter+1)
+                self.writer.add_scalar(tag="ce_loss_validation",scalar_value=ce_loss_1.item(),global_step=iter+1)
+                self.writer.add_scalar(tag="ds_loss_validation",scalar_value=ce_loss_ds.item() if isinstance(ce_loss_ds, torch.Tensor) else ce_loss_ds,global_step=iter+1)
+                self.writer.add_scalar(tag="final_loss_validation",scalar_value=final_loss.item(),global_step=iter+1)
         f1_score = self.evaluator.Pixel_F1_score()
         oa = self.evaluator.Pixel_Accuracy()
         rec = self.evaluator.Pixel_Recall_Rate()
