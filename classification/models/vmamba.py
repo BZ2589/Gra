@@ -1811,6 +1811,14 @@ class Backbone_VSSM(VSSM):
                 if 'downsample.norm' in k:
                     k = k.replace('downsample.norm', 'downsample.3')
                 
+                # Reshape flattened weights from some VMamba implementations
+                if 'dt_projs_weight' in k and len(v.shape) == 2:
+                    v = v.view(4, -1, v.shape[-1])
+                if 'x_proj_weight' in k and len(v.shape) == 2:
+                    v = v.view(4, -1, v.shape[-1])
+                if 'dt_projs_bias' in k and len(v.shape) == 1:
+                    v = v.view(4, -1)
+                
                 new_state_dict[k] = v
             state_dict = new_state_dict
                 
