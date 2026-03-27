@@ -9,3 +9,4 @@ CUDA_VISIBLE_DEVICES=1 python changedetection/script/train_MambaBCD.py --dataset
                                 --decoder_depth 4 \
                                 --cfg './changedetection/configs/vssm1/vssm_tiny_224.yaml' \
                                 --pretrained_weight_path './changedetection/pretrained_weight/model.safetensors' \
+                                --train_name 'my_first_run' \

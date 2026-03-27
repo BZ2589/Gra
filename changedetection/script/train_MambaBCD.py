@@ -27,7 +27,8 @@ class Trainer(object):
         self.train_data_loader = make_data_loader(args)
 
         self.evaluator = Evaluator(num_class=2)
-        self.writer = SummaryWriter(log_dir=f"./logs/{self.args.model_type}")
+        log_suffix = args.train_name if args.train_name else str(time.time())
+        self.writer = SummaryWriter(log_dir=f"./logs/{self.args.model_type}_{log_suffix}")
         self.deep_model = MambaPyramid(
             pretrained=args.pretrained_weight_path,
             patch_size=config.MODEL.VSSM.PATCH_SIZE, 
@@ -63,8 +64,12 @@ class Trainer(object):
             ) 
         
         self.deep_model = self.deep_model.cuda()
+        
+        # Build save path with train_name if provided, else use timestamp
+        save_suffix = args.train_name if args.train_name else str(time.time())
         self.model_save_path = os.path.join(args.model_param_path, args.dataset,
-                                            args.model_type + '_' + str(time.time()))
+                                            args.model_type + '_' + save_suffix)
+        
         self.lr = args.learning_rate
         self.epoch = args.max_iters // args.batch_size
         torch.random.manual_seed(3407)
@@ -228,6 +233,7 @@ def main():
     parser.add_argument('--max_iters', type=int, default=240000)
     parser.add_argument('--model_type', type=str, default='MambaBCD')
     parser.add_argument('--model_param_path', type=str, default='../saved_models')
+    parser.add_argument('--train_name', type=str, default=None, help='name for the training run, used for creating save directory')
 
     parser.add_argument('--resume', type=str)
     parser.add_argument('--learning_rate', type=float, default=1e-4)
