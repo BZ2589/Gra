@@ -7,5 +7,5 @@ CUDA_VISIBLE_DEVICES=1 python changedetection/script/train_MambaBCD.py --dataset
                                 --train_dataset_path '/home/z/dataset/LEVIR-CD-1024/train' \
                                 --test_dataset_path '/home/z/dataset/LEVIR-CD-1024/test' \
                                 --decoder_depth 4 \
-                                --cfg './changedetection/configs/vssm1/vssm_base_224.yaml' \
+                                --cfg './changedetection/configs/vssm1/vssm_tiny_224.yaml' \
                                 --pretrained_weight_path './changedetection/pretrained_weight/model.safetensors' \

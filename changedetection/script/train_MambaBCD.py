@@ -91,7 +91,7 @@ class Trainer(object):
                         self.optim,               # 优化器
                         T_max=10000,             # 学习率下限
                     )
-        self.scaler = torch.cuda.amp.GradScaler()
+        self.scaler = torch.amp.GradScaler('cuda')
 
     def training(self):
         best_kc = 0.0
@@ -111,7 +111,7 @@ class Trainer(object):
             labels = labels.cuda().long()
 
             self.optim.zero_grad()
-            with torch.cuda.amp.autocast():
+            with torch.amp.autocast('cuda'):
                 output_1,ds_feature = self.deep_model(pre_change_imgs, post_change_imgs)
                 ce_loss_1 = F.cross_entropy(output_1, labels, ignore_index=255)
                 ce_loss_ds = 0
