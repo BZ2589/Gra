@@ -106,6 +106,11 @@ class Trainer(object):
         with open(os.path.join(self.model_save_path,'result.txt'),'w') as output:
             output.write(f'best round:{best_round}\n best iter: 0')
         
+        # Initialize CSV for logging validation metrics
+        csv_path = os.path.join(self.model_save_path, 'metrics.csv')
+        with open(csv_path, 'w', newline='') as f:
+            f.write('iter,rec,pre,oa,f1_score,iou,kc\n')
+            
         train_enumerator = enumerate(self.train_data_loader)
         pbar = tqdm(range(elem_num))
         for _ in pbar:
@@ -143,6 +148,11 @@ class Trainer(object):
                 if (itera + 1) % 500 == 0:
                     self.deep_model.eval()
                     rec, pre, oa, f1_score, iou, kc = self.validation(iter=itera)
+                    
+                    # Log metrics to CSV
+                    with open(csv_path, 'a', newline='') as f:
+                        f.write(f'{itera + 1},{rec},{pre},{oa},{f1_score},{iou},{kc}\n')
+                        
                     if kc > best_kc:
                         torch.save(self.deep_model.state_dict(),
                                    os.path.join(self.model_save_path, f'{itera + 1}_model.pth'))
