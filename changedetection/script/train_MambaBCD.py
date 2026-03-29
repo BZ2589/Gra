@@ -112,7 +112,7 @@ class Trainer(object):
             f.write('iter,rec,pre,oa,f1_score,iou,kc\n')
             
         train_enumerator = enumerate(self.train_data_loader)
-        pbar = tqdm(range(elem_num))
+        pbar = tqdm(range(elem_num), disable=not sys.stdout.isatty())
         for _ in pbar:
             itera, data = train_enumerator.__next__()
             pre_change_imgs, post_change_imgs, labels, _ = data
