@@ -80,3 +80,5 @@ changedetection/pretrained_weight/model.safetensors
 __pycache__/
 *.py[cod]
 *$py.class
+
+错误.txt
