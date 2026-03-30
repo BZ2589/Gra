@@ -1,4 +1,8 @@
-CUDA_VISIBLE_DEVICES=1 python changedetection/script/train_MambaBCD.py --dataset 'LEVIR-CD' \
+#!/bin/bash
+GPU_ID=${2:-0} # Use the second argument as GPU_ID, default to 0 if not provided
+RUN_NAME=${1:-'default_run'} # Use the first argument as RUN_NAME, default to 'default_run' if not provided
+
+CUDA_VISIBLE_DEVICES=$GPU_ID python changedetection/script/train_MambaBCD.py --dataset 'LEVIR-CD' \
                                 --batch_size 8 \
                                 --crop_size 256 \
                                 --max_iters 800000 \
@@ -9,4 +13,4 @@ CUDA_VISIBLE_DEVICES=1 python changedetection/script/train_MambaBCD.py --dataset
                                 --decoder_depth 4 \
                                 --cfg './changedetection/configs/vssm1/vssm_base_224.yaml' \
                                 --pretrained_weight_path './changedetection/pretrained_weight/vssm_base_0229_ckpt_epoch_237.pth' \
-                                --train_name "$1"
+                                --train_name "$RUN_NAME"
