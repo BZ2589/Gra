@@ -87,6 +87,78 @@ class ResNetFPN(nn.Module):
         # Return the feature maps (c2 to c5 are usually used for FPN)
         return [ c2, c3, c4, c5]
 
+
+class SynergisticHighOrderInteractionModule(nn.Module):
+    """
+    协同高阶交互模块：
+    输入：P1, P2, shape = (B, C, H, W)
+    输出：与原始 torch.cat([P1, P2], dim=1) 等价的通道数，即 (B, 2C, H, W)
+    通过局部的二阶双线性交互（通道外积）捕获 P1/P2 在空间位置上的非线性关联。
+    """
+
+    def __init__(
+        self,
+        in_channels: int,
+        reduction_ratio: int = 4,
+        max_inter_channels: int = 32,
+        dropout: float = 0.0,
+    ):
+        super().__init__()
+        assert in_channels > 0
+        out_channels = in_channels * 2
+
+        # 交互空间通道数 d：控制 d^2 的中间张量规模（避免显存爆炸）
+        inter_channels = max(8, min(in_channels // reduction_ratio, max_inter_channels))
+        self.inter_channels = inter_channels
+
+        # 将 P1/P2 投影到低维交互空间
+        self.proj_t1 = nn.Conv2d(in_channels, inter_channels, kernel_size=1, bias=False)
+        self.proj_t2 = nn.Conv2d(in_channels, inter_channels, kernel_size=1, bias=False)
+
+        # 高阶双线性交互（输出通道为 d*d，之后再用 1x1 降回 2C）
+        self.norm_pair = LayerNorm2d(inter_channels * inter_channels)
+        self.inter_proj = nn.Conv2d(inter_channels * inter_channels, out_channels, kernel_size=1, bias=False)
+
+        # 残差路径：直接把 P1/P2 投影到 2C 并相加（不使用 concat/差作为主交互）
+        self.res_t1 = nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False)
+        self.res_t2 = nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False)
+
+        self.norm_out = LayerNorm2d(out_channels)
+        self.act = nn.GELU()
+        self.drop = nn.Dropout(dropout) if dropout and dropout > 0.0 else nn.Identity()
+
+    def forward(self, P1: torch.Tensor, P2: torch.Tensor) -> torch.Tensor:
+        # P1/P2 必须同形状，且 H/W 不允许被改变
+        if P1.shape != P2.shape:
+            raise ValueError(f"P1/P2 shape mismatch: {P1.shape} vs {P2.shape}")
+
+        B, C, H, W = P1.shape
+
+        # 通道投影到交互空间
+        x1 = self.proj_t1(P1)  # (B, d, H, W)
+        x2 = self.proj_t2(P2)  # (B, d, H, W)
+
+        # 归一化有助于稳定高阶协方差/外积的尺度
+        x1 = F.normalize(x1, dim=1)
+        x2 = F.normalize(x2, dim=1)
+
+        # 二阶双线性池化/协方差风格交互（局部外积，保留 H/W）
+        # interaction[b, d, e, h, w] = x1[b,d,h,w] * x2[b,e,h,w]
+        interaction = torch.einsum("b d h w, b e h w -> b d e h w", x1, x2)  # (B, d, d, H, W)
+        interaction = interaction.reshape(B, self.inter_channels * self.inter_channels, H, W)  # (B, d*d, H, W)
+
+        interaction = self.norm_pair(interaction)
+        interaction = self.inter_proj(interaction)  # (B, 2C, H, W)
+        interaction = self.drop(interaction)
+
+        # 残差稳定训练：将 P1/P2 分别投影到 2C 并相加
+        residual = self.res_t1(P1) + self.res_t2(P2)  # (B, 2C, H, W)
+
+        out = interaction + residual
+        out = self.norm_out(out)
+        out = self.act(out)
+        return out
+
 # Load a pre-trained ResNet model
 resnet = models.resnet101(weights=models.ResNet101_Weights.IMAGENET1K_V1)
 # resnet = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
@@ -143,6 +215,12 @@ class MambaPyramid(nn.Module):
             **clean_kwargs
         )
 
+        # 双时相特征金字塔融合（原先：逐层 torch.cat([T1, T2], dim=1)）
+        # 现在替换为：协同高阶交互模块（输出通道仍为 2C，H/W 保持不变）
+        self.ho_interaction = nn.ModuleList(
+            [SynergisticHighOrderInteractionModule(ch) for ch in self.encoder.dims]
+        )
+
         self.main_clf = nn.Conv2d(in_channels=128*2, out_channels=2, kernel_size=1)
         self.ds = nn.ModuleList([])
         for i in range(self.depth-1):
@@ -160,7 +238,7 @@ class MambaPyramid(nn.Module):
         post_features = self.encoder(post_data)
         feature = []
         for index in range(len(pre_features)):
-            feature.append(torch.cat([pre_features[index],post_features[index]],dim=1))
+            feature.append(self.ho_interaction[index](pre_features[index], post_features[index]))
         output,output_ds = self.decoder(feature)
         output = self.main_clf(output)
         for i in range(self.depth-1):
