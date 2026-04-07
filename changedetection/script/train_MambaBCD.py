@@ -101,6 +101,7 @@ class Trainer(object):
     def training(self):
         best_kc = 0.0
         best_round = []
+        best_iter = 0
         torch.cuda.empty_cache()
         elem_num = len(self.train_data_loader)
         with open(os.path.join(self.model_save_path,'result.txt'),'w') as output:
