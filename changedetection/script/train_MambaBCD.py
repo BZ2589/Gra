@@ -121,6 +121,11 @@ class Trainer(object):
             post_change_imgs = post_change_imgs.cuda()
             labels = labels.cuda().long()
 
+            # ========= 在这里加上这两行打印代码 =========
+            print("T1 shape:", pre_change_imgs.shape)
+            print("T2 shape:", post_change_imgs.shape)
+            # ============================================
+            
             self.optim.zero_grad()
             with torch.amp.autocast('cuda'):
                 output_1,ds_feature = self.deep_model(pre_change_imgs, post_change_imgs)
