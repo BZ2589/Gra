@@ -509,6 +509,133 @@ def cross_selective_scan(
     return (y.to(x.dtype) if to_dtype else y)
 
 
+def cross_selective_scan_decoupled_u_param(
+    x_u: torch.Tensor,
+    x_param: torch.Tensor,
+    x_proj_weight: torch.Tensor = None,
+    x_proj_bias: torch.Tensor = None,
+    dt_projs_weight: torch.Tensor = None,
+    dt_projs_bias: torch.Tensor = None,
+    A_logs: torch.Tensor = None,
+    Ds: torch.Tensor = None,
+    delta_softplus: bool = True,
+    out_norm: torch.nn.Module = None,
+    out_norm_shape: str = "v0",
+    channel_first: bool = False,
+    to_dtype: bool = True,
+    force_fp32: bool = False,
+    nrows: int = -1,
+    backnrows: int = -1,
+    ssoflex: bool = True,
+    SelectiveScan=None,
+    CrossScan=CrossScan,
+    CrossMerge=CrossMerge,
+    no_einsum: bool = False,
+    dt_low_rank: bool = True,
+):
+    """
+    与 cross_selective_scan 一致，但将「送入 selective_scan 的序列 u」与「由 x_proj 得到的 B、C、Δ」解耦：
+    - u 来自对 x_u 的 CrossScan（保持主干扫描输入）
+    - B、C、Δ 来自对 x_param 的 CrossScan 再经 x_proj / dt_proj（由对时相引导的参数通道）
+    x_u 与 x_param 须同形状 (B, D, H, W)，且与原版 SS2D.forward_corev2 输入约定一致。
+    """
+    assert x_u.shape == x_param.shape, f"x_u vs x_param shape: {x_u.shape} vs {x_param.shape}"
+    B, D, H, W = x_u.shape
+    D, N = A_logs.shape
+    K, D, R = dt_projs_weight.shape
+    L = H * W
+
+    if nrows == 0:
+        if D % 4 == 0:
+            nrows = 4
+        elif D % 3 == 0:
+            nrows = 3
+        elif D % 2 == 0:
+            nrows = 2
+        else:
+            nrows = 1
+
+    if backnrows == 0:
+        if D % 4 == 0:
+            backnrows = 4
+        elif D % 3 == 0:
+            backnrows = 3
+        elif D % 2 == 0:
+            backnrows = 2
+        else:
+            backnrows = 1
+
+    def selective_scan(u, delta, A, B, C, D=None, delta_bias=None, delta_softplus=True):
+        return SelectiveScan.apply(u, delta, A, B, C, D, delta_bias, delta_softplus, nrows, backnrows, ssoflex)
+
+    if not dt_low_rank:
+        x_dbl = F.conv1d(
+            x_param.view(B, -1, L),
+            x_proj_weight.view(-1, D, 1),
+            bias=(x_proj_bias.view(-1) if x_proj_bias is not None else None),
+            groups=K,
+        )
+        dts, Bs, Cs = torch.split(x_dbl.view(B, -1, L), [D, 4 * N, 4 * N], dim=1)
+        xs = CrossScan.apply(x_u)
+        dts = CrossScan.apply(dts)
+    elif no_einsum:
+        xs_p = CrossScan.apply(x_param)
+        x_dbl = F.conv1d(
+            xs_p.view(B, -1, L),
+            x_proj_weight.view(-1, D, 1),
+            bias=(x_proj_bias.view(-1) if x_proj_bias is not None else None),
+            groups=K,
+        )
+        dts, Bs, Cs = torch.split(x_dbl.view(B, K, -1, L), [R, N, N], dim=2)
+        dts = F.conv1d(dts.contiguous().view(B, -1, L), dt_projs_weight.view(K * D, -1, 1), groups=K)
+        xs = CrossScan.apply(x_u)
+    else:
+        xs_p = CrossScan.apply(x_param)
+        x_dbl = torch.einsum("b k d l, k c d -> b k c l", xs_p, x_proj_weight)
+        if x_proj_bias is not None:
+            x_dbl = x_dbl + x_proj_bias.view(1, K, -1, 1)
+        dts, Bs, Cs = torch.split(x_dbl, [R, N, N], dim=2)
+        dts = torch.einsum("b k r l, k d r -> b k d l", dts, dt_projs_weight)
+        xs = CrossScan.apply(x_u)
+
+    xs = xs.view(B, -1, L)
+    dts = dts.contiguous().view(B, -1, L)
+    As = -torch.exp(A_logs.to(torch.float))
+    Bs = Bs.contiguous().view(B, K, N, L)
+    Cs = Cs.contiguous().view(B, K, N, L)
+    Ds = Ds.to(torch.float)
+    delta_bias = dt_projs_bias.view(-1).to(torch.float)
+
+    if force_fp32:
+        xs = xs.to(torch.float)
+        dts = dts.to(torch.float)
+        Bs = Bs.to(torch.float)
+        Cs = Cs.to(torch.float)
+
+    ys: torch.Tensor = selective_scan(
+        xs, dts, As, Bs, Cs, Ds, delta_bias, delta_softplus
+    ).view(B, K, -1, H, W)
+
+    y: torch.Tensor = CrossMerge.apply(ys)
+
+    if channel_first:
+        y = y.view(B, -1, H, W)
+        if out_norm_shape in ["v1"]:
+            y = out_norm(y)
+        else:
+            y = out_norm(y.permute(0, 2, 3, 1))
+            y = y.permute(0, 3, 1, 2)
+        return (y.to(x_u.dtype) if to_dtype else y)
+
+    if out_norm_shape in ["v1"]:
+        y = out_norm(y.view(B, -1, H, W)).permute(0, 2, 3, 1)
+    else:
+        y = y.transpose(dim0=1, dim1=2).contiguous()
+        y = out_norm(y).view(B, H, W, -1)
+
+    return (y.to(x_u.dtype) if to_dtype else y)
+
+
 def selective_scan_flop_jit(inputs, outputs):
     print_jit_input_names(inputs)
     B, D, L = inputs[0].type().sizes()
@@ -1212,6 +1339,36 @@ class SS2D(nn.Module):
             **kwargs,
         )
 
+    def forward_core_decoupled(self, x_u: torch.Tensor, x_param: torch.Tensor, **kwargs):
+        """时相协同：u 序列来自 x_u，B/C/Δ 来自对 x_param 的投影（与 forward_corev2 共用权重）。"""
+        x_proj_weight = self.x_proj_weight
+        dt_projs_weight = self.dt_projs_weight
+        dt_projs_bias = self.dt_projs_bias
+        A_logs = self.A_logs
+        Ds = self.Ds
+        out_norm = getattr(self, "out_norm", None)
+        out_norm_shape = getattr(self, "out_norm_shape", "v0")
+        extra = {}
+        fc = self.forward_core
+        if isinstance(fc, partial) and fc.keywords:
+            extra = dict(fc.keywords)
+        return cross_selective_scan_decoupled_u_param(
+            x_u,
+            x_param,
+            x_proj_weight,
+            None,
+            dt_projs_weight,
+            dt_projs_bias,
+            A_logs,
+            Ds,
+            delta_softplus=True,
+            out_norm=out_norm,
+            channel_first=self.channel_first,
+            out_norm_shape=out_norm_shape,
+            **extra,
+            **kwargs,
+        )
+
     def forwardv2(self, x: torch.Tensor, **kwargs):
         if not x.is_contiguous():
             x = x.contiguous()
@@ -1444,6 +1601,195 @@ class VSSBlock(nn.Module):
             return self._forward(input)
 
 
+class CoSS2D(nn.Module):
+    """
+    时相协同 SS2D：T1/T2 共享同一套 in_proj / conv / x_proj / dt_proj / out_proj 权重；
+    选择性扫描中，输入序列 u 仍来自本分支经 depthwise conv 后的特征，而 B、C、Δ 由「本分支 + 对时相」
+    经轻量 DW+PW 融合后的 x_param 经 CrossScan 与 x_proj 得到，实现参数级交叉引导。
+    仅保证与 SS2D.forwardv2（forward_type 如 v2/v01/v4 等）路径一致。
+    """
+
+    def __init__(
+        self,
+        d_model: int,
+        d_state: int,
+        ssm_ratio: float,
+        dt_rank: Any,
+        act_layer: nn.Module,
+        d_conv: int,
+        conv_bias: bool,
+        dropout: float,
+        initialize: str,
+        forward_type: str,
+        channel_first: bool,
+    ):
+        super().__init__()
+        self.ss2d = SS2D(
+            d_model=d_model,
+            d_state=d_state,
+            ssm_ratio=ssm_ratio,
+            dt_rank=dt_rank,
+            act_layer=act_layer,
+            d_conv=d_conv,
+            conv_bias=conv_bias,
+            dropout=dropout,
+            initialize=initialize,
+            forward_type=forward_type,
+            channel_first=channel_first,
+        )
+        self.d_inner = int(ssm_ratio * d_model)
+        c2 = 2 * self.d_inner
+        # 轻量：Depthwise 3x3 + Pointwise 1x1，将 [u1||u2] 压回 d_inner 作为 x_param
+        self.param_fuse = nn.Sequential(
+            nn.Conv2d(c2, c2, kernel_size=3, padding=1, groups=c2, bias=False),
+            nn.Conv2d(c2, self.d_inner, kernel_size=1, bias=False),
+        )
+
+    def _inner(self, x: torch.Tensor):
+        """复现 SS2D.forwardv2 中 in_proj → conv2d → act 之前的状态，得到 (u, z)。"""
+        ss = self.ss2d
+        if getattr(ss, "forward", None) is not ss.forwardv2:
+            raise NotImplementedError(
+                "CoSS2D 当前仅支持 SS2D 使用 forwardv2（请检查 forward_type，例如 v2）"
+            )
+        if not x.is_contiguous():
+            x = x.contiguous()
+        with_dconv = ss.d_conv > 1
+        x = ss.in_proj(x)
+        z = None
+        if not ss.disable_z:
+            x, z = x.chunk(2, dim=(1 if ss.channel_first else -1))
+            if not ss.disable_z_act:
+                z = ss.act(z)
+        if not ss.channel_first:
+            x = x.permute(0, 3, 1, 2).contiguous()
+        if with_dconv:
+            x = ss.conv2d(x)
+        x = ss.act(x)
+        return x, z
+
+    def _scan_branch(self, u: torch.Tensor, fused: torch.Tensor, z: Optional[torch.Tensor]):
+        ss = self.ss2d
+        y = ss.forward_core_decoupled(u, fused)
+        if not ss.disable_z:
+            y = y * z
+        return ss.dropout(ss.out_proj(y))
+
+    def forward(self, x1: torch.Tensor, x2: torch.Tensor):
+        u1, z1 = self._inner(x1)
+        u2, z2 = self._inner(x2)
+        # 计算 T1 的 B、C、Δ 时融入 T2；计算 T2 时融入 T1（顺序互换）
+        f12 = self.param_fuse(torch.cat([u1, u2], dim=1))
+        f21 = self.param_fuse(torch.cat([u2, u1], dim=1))
+        y1 = self._scan_branch(u1, f12, z1)
+        y2 = self._scan_branch(u2, f21, z2)
+        return y1, y2
+
+
+class CoVSSBlocks(nn.Module):
+    """替代 nn.Sequential(VSSBlock...)：双输入双输出，供 Co-Selective 阶段使用。"""
+
+    def __init__(self, blocks: list):
+        super().__init__()
+        self.blocks = nn.ModuleList(blocks)
+
+    def forward(self, x1: torch.Tensor, x2: torch.Tensor):
+        for blk in self.blocks:
+            x1, x2 = blk(x1, x2)
+        return x1, x2
+
+
+class Co_VSSBlock(nn.Module):
+    """
+    时相协同 VSSBlock：接收 (X1, X2)，输出同形状 (Y1, Y2)。
+    内部用 CoSS2D 替代平行双 SS2D，在 SSM 支路完成参数级交叉引导；FFN 仍逐分支独立、共享权重。
+    用于替换原 Backbone 各 Stage 中的 `VSSBlock`（当启用 co_selective_scan 时由 `CoVSSBlocks` 封装）。
+    """
+
+    def __init__(
+        self,
+        hidden_dim: int = 0,
+        drop_path: float = 0,
+        norm_layer: nn.Module = nn.LayerNorm,
+        channel_first: bool = False,
+        ssm_d_state: int = 16,
+        ssm_ratio: float = 2.0,
+        ssm_dt_rank: Any = "auto",
+        ssm_act_layer=nn.SiLU,
+        ssm_conv: int = 3,
+        ssm_conv_bias: bool = True,
+        ssm_drop_rate: float = 0,
+        ssm_init: str = "v0",
+        forward_type: str = "v2",
+        mlp_ratio: float = 4.0,
+        mlp_act_layer=nn.GELU,
+        mlp_drop_rate: float = 0.0,
+        gmlp: bool = False,
+        use_checkpoint: bool = False,
+        post_norm: bool = False,
+        **kwargs,
+    ):
+        super().__init__()
+        self.ssm_branch = ssm_ratio > 0
+        self.mlp_branch = mlp_ratio > 0
+        self.use_checkpoint = use_checkpoint
+        self.post_norm = post_norm
+
+        if self.ssm_branch:
+            self.norm = norm_layer(hidden_dim)
+            self.op = CoSS2D(
+                d_model=hidden_dim,
+                d_state=ssm_d_state,
+                ssm_ratio=ssm_ratio,
+                dt_rank=ssm_dt_rank,
+                act_layer=ssm_act_layer,
+                d_conv=ssm_conv,
+                conv_bias=ssm_conv_bias,
+                dropout=ssm_drop_rate,
+                initialize=ssm_init,
+                forward_type=forward_type,
+                channel_first=channel_first,
+            )
+
+        self.drop_path = DropPath(drop_path)
+
+        if self.mlp_branch:
+            _MLP = Mlp if not gmlp else gMlp
+            self.norm2 = norm_layer(hidden_dim)
+            mlp_hidden_dim = int(hidden_dim * mlp_ratio)
+            self.mlp = _MLP(
+                in_features=hidden_dim,
+                hidden_features=mlp_hidden_dim,
+                act_layer=mlp_act_layer,
+                drop=mlp_drop_rate,
+                channels_first=channel_first,
+            )
+
+    def _forward(self, x1: torch.Tensor, x2: torch.Tensor):
+        if self.ssm_branch:
+            if self.post_norm:
+                o1, o2 = self.op(x1, x2)
+                x1 = x1 + self.drop_path(self.norm(o1))
+                x2 = x2 + self.drop_path(self.norm(o2))
+            else:
+                o1, o2 = self.op(self.norm(x1), self.norm(x2))
+                x1 = x1 + self.drop_path(o1)
+                x2 = x2 + self.drop_path(o2)
+        if self.mlp_branch:
+            if self.post_norm:
+                x1 = x1 + self.drop_path(self.norm2(self.mlp(x1)))
+                x2 = x2 + self.drop_path(self.norm2(self.mlp(x2)))
+            else:
+                x1 = x1 + self.drop_path(self.mlp(self.norm2(x1)))
+                x2 = x2 + self.drop_path(self.mlp(self.norm2(x2)))
+        return x1, x2
+
+    def forward(self, x1: torch.Tensor, x2: torch.Tensor):
+        if self.use_checkpoint:
+            return checkpoint.checkpoint(self._forward, x1, x2, use_reentrant=False)
+        return self._forward(x1, x2)
+
+
 class VSSM(nn.Module):
     def __init__(
         self, 
@@ -1473,10 +1819,12 @@ class VSSM(nn.Module):
         norm_layer="LN", # "BN", "LN2D"
         downsample_version: str = "v2", # "v1", "v2", "v3"
         patchembed_version: str = "v1", # "v1", "v2"
-        use_checkpoint=False,  
+        use_checkpoint=False,
+        co_selective_scan: bool = False,
         **kwargs,
     ):
         super().__init__()
+        self.co_selective_scan = co_selective_scan
         self.channel_first = (norm_layer.lower() in ["bn", "ln2d"])
         self.num_classes = num_classes
         self.num_layers = len(depths)
@@ -1525,7 +1873,8 @@ class VSSM(nn.Module):
                 channel_first=self.channel_first,
             ) if (i_layer < self.num_layers - 1) else nn.Identity()
 
-            self.layers.append(self._make_layer(
+            _make_layer_fn = self._make_layer_co if co_selective_scan else self._make_layer
+            self.layers.append(_make_layer_fn(
                 dim = self.dims[i_layer],
                 drop_path = dpr[sum(depths[:i_layer]):sum(depths[:i_layer + 1])],
                 use_checkpoint=use_checkpoint,
@@ -1676,6 +2025,63 @@ class VSSM(nn.Module):
             blocks=nn.Sequential(*blocks,),
             downsample=downsample,
         ))
+
+    @staticmethod
+    def _make_layer_co(
+        dim: int = 96,
+        drop_path: list = None,
+        use_checkpoint: bool = False,
+        norm_layer: nn.Module = nn.LayerNorm,
+        downsample=nn.Identity(),
+        channel_first: bool = False,
+        ssm_d_state: int = 16,
+        ssm_ratio: float = 2.0,
+        ssm_dt_rank: Any = "auto",
+        ssm_act_layer=nn.SiLU,
+        ssm_conv: int = 3,
+        ssm_conv_bias: bool = True,
+        ssm_drop_rate: float = 0.0,
+        ssm_init: str = "v0",
+        forward_type: str = "v2",
+        mlp_ratio: float = 4.0,
+        mlp_act_layer=nn.GELU,
+        mlp_drop_rate: float = 0.0,
+        gmlp: bool = False,
+        **kwargs,
+    ):
+        if drop_path is None:
+            drop_path = [0.1, 0.1]
+        depth = len(drop_path)
+        blocks = []
+        for d in range(depth):
+            blocks.append(
+                Co_VSSBlock(
+                    hidden_dim=dim,
+                    drop_path=drop_path[d],
+                    norm_layer=norm_layer,
+                    channel_first=channel_first,
+                    ssm_d_state=ssm_d_state,
+                    ssm_ratio=ssm_ratio,
+                    ssm_dt_rank=ssm_dt_rank,
+                    ssm_act_layer=ssm_act_layer,
+                    ssm_conv=ssm_conv,
+                    ssm_conv_bias=ssm_conv_bias,
+                    ssm_drop_rate=ssm_drop_rate,
+                    ssm_init=ssm_init,
+                    forward_type=forward_type,
+                    mlp_ratio=mlp_ratio,
+                    mlp_act_layer=mlp_act_layer,
+                    mlp_drop_rate=mlp_drop_rate,
+                    gmlp=gmlp,
+                    use_checkpoint=use_checkpoint,
+                )
+            )
+        return nn.Sequential(
+            OrderedDict(
+                blocks=CoVSSBlocks(blocks),
+                downsample=downsample,
+            )
+        )
 
     def forward(self, x: torch.Tensor):
         x = self.patch_embed(x)

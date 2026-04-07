@@ -177,9 +177,13 @@ resnet = models.resnet101(weights=models.ResNet101_Weights.IMAGENET1K_V1)
 # for i, f in enumerate(features):
 #     print(f"Feature map {i+1} shape: {f.shape}")
 class MambaPyramid(nn.Module):
-    def __init__(self, pretrained,**kwargs):
+    def __init__(self, pretrained, co_selective_scan: bool = True, **kwargs):
         super(MambaPyramid, self).__init__()
-        self.encoder = Backbone_VSSM(out_indices=(0, 1, 2, 3), pretrained=pretrained, **kwargs)
+        # co_selective_scan=True：骨干网络内用 Co_VSSBlock 双时相协同扫描，一次前向同时更新 T1/T2 特征
+        self.co_selective_scan = co_selective_scan
+        enc_kw = dict(kwargs)
+        enc_kw["co_selective_scan"] = co_selective_scan
+        self.encoder = Backbone_VSSM(out_indices=(0, 1, 2, 3), pretrained=pretrained, **enc_kw)
         # self.out_ch = out_ch
         # self.encoder=ResNetFPN(resnet,dim=[256,512,1024,2048])
         # self.encoder=ResNetFPN(resnet,dim=[64,128,256,512])
@@ -233,9 +237,12 @@ class MambaPyramid(nn.Module):
         return F.interpolate(x, size=(H, W), mode='bilinear') + y
     
     def forward(self, pre_data, post_data):
-        # Encoder processing
-        pre_features = self.encoder(pre_data)
-        post_features = self.encoder(post_data)
+        # Encoder：协同扫描时单次前向；否则与原版一致两次独立编码
+        if self.co_selective_scan:
+            pre_features, post_features = self.encoder(pre_data, post_data)
+        else:
+            pre_features = self.encoder(pre_data)
+            post_features = self.encoder(post_data)
         feature = []
         for index in range(len(pre_features)):
             feature.append(self.ho_interaction[index](pre_features[index], post_features[index]))

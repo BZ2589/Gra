@@ -10,10 +10,11 @@ class Backbone_ResNet(nn.Module):
     def forward(self,x):
         pass
 class Backbone_VSSM(VSSM):
-    def __init__(self, out_indices=(0, 1, 2, 3), pretrained=None, norm_layer='ln2d', **kwargs):
+    def __init__(self, out_indices=(0, 1, 2, 3), pretrained=None, norm_layer='ln2d', co_selective_scan=False, **kwargs):
         # norm_layer='ln'
-        kwargs.update(norm_layer=norm_layer)
+        kwargs.update(norm_layer=norm_layer, co_selective_scan=co_selective_scan)
         super().__init__(**kwargs)
+        self.co_selective_scan = co_selective_scan
         self.channel_first = (norm_layer.lower() in ["bn", "ln2d"])
         _NORMLAYERS = dict(
             ln=nn.LayerNorm,
@@ -93,27 +94,54 @@ class Backbone_VSSM(VSSM):
         except Exception as e:
             print(f"Failed loading checkpoint form {ckpt}: {e}")
 
-    def forward(self, x):
-        def layer_forward(l, x):
-            x = l.blocks(x)
-            y = l.downsample(x)
-            return x, y
-        # import pdb
-        # pdb.set_trace()
+    def forward(self, *inputs):
+        """单时相：forward(x)。双时相协同扫描：forward(pre, post)，返回 (outs_t1, outs_t2)。"""
+        if len(inputs) == 2 and self.co_selective_scan:
+            pre_data, post_data = inputs[0], inputs[1]
+            x1 = self.patch_embed(pre_data)
+            x2 = self.patch_embed(post_data)
+            outs1, outs2 = [], []
+            for i, layer in enumerate(self.layers):
+                x1, x2 = layer.blocks(x1, x2)
+                o1, o2 = x1, x2
+                x1 = layer.downsample(o1)
+                x2 = layer.downsample(o2)
+                if i in self.out_indices:
+                    nrm = getattr(self, f'outnorm{i}')
+                    out1 = nrm(o1)
+                    out2 = nrm(o2)
+                    if not self.channel_first:
+                        out1 = out1.permute(0, 3, 1, 2).contiguous()
+                        out2 = out2.permute(0, 3, 1, 2).contiguous()
+                    outs1.append(out1)
+                    outs2.append(out2)
+            if len(self.out_indices) == 0:
+                return x1, x2
+            return outs1, outs2
+
+        if len(inputs) != 1:
+            raise ValueError(
+                f"Backbone_VSSM: 期望 1 个输入 (x) 或协同模式下 2 个输入 (pre, post)，收到 {len(inputs)} 个"
+            )
+        x = inputs[0]
+
+        def layer_forward(l, x_in):
+            x_in = l.blocks(x_in)
+            y = l.downsample(x_in)
+            return x_in, y
+
         x = self.patch_embed(x)
         outs = []
         for i, layer in enumerate(self.layers):
-            o, x = layer_forward(layer, x) # (B, H, W, C)
+            o, x = layer_forward(layer, x)
             if i in self.out_indices:
                 norm_layer = getattr(self, f'outnorm{i}')
                 out = norm_layer(o)
                 if not self.channel_first:
                     out = out.permute(0, 3, 1, 2).contiguous()
                 outs.append(out)
-        # import pdb
-        # pdb.set_trace()
         if len(self.out_indices) == 0:
             return x
-        
+
         return outs
 
