@@ -1648,7 +1648,10 @@ class CoSS2D(nn.Module):
     def _inner(self, x: torch.Tensor):
         """复现 SS2D.forwardv2 中 in_proj → conv2d → act 之前的状态，得到 (u, z)。"""
         ss = self.ss2d
-        if getattr(ss, "forward", None) is not ss.forwardv2:
+        # SS2D 中 self.forward = self.forwardv2 时，forward / forwardv2 为不同 bound method 对象，不能用 is 比较
+        fw = getattr(ss, "forward", None)
+        fv2 = getattr(ss, "forwardv2", None)
+        if fw is None or fv2 is None or getattr(fw, "__func__", fw) is not getattr(fv2, "__func__", fv2):
             raise NotImplementedError(
                 "CoSS2D 当前仅支持 SS2D 使用 forwardv2（请检查 forward_type，例如 v2）"
             )

@@ -1,5 +1,6 @@
 from classification.models.vmamba import VSSM, LayerNorm2d, VSSBlock, Permute
 
+import re
 import torch
 import torch.nn as nn
 
@@ -31,6 +32,17 @@ class Backbone_VSSM(VSSM):
 
         del self.classifier
         self.load_pretrained(pretrained)
+
+    @staticmethod
+    def _remap_ckpt_keys_for_co_selective(k: str) -> str:
+        """
+        原版 VSSM: layers.{i}.blocks.{j}.*
+        Co 结构: layers.{i}.blocks.blocks.{j}.* 且 CoSS2D 内参数在 op.ss2d.*（checkpoint 仍为 op.*）
+        """
+        k = re.sub(r"^(layers\.\d+\.blocks)\.(\d+)\.", r"\1.blocks.\2.", k)
+        if "param_fuse" not in k and ".op.ss2d." not in k and ".op." in k:
+            k = k.replace(".op.", ".op.ss2d.", 1)
+        return k
 
     def load_pretrained(self, ckpt=None, key="model"):
         if ckpt is None:
@@ -84,6 +96,9 @@ class Backbone_VSSM(VSSM):
                     v = v.view(4, -1, v.shape[-1])
                 if 'dt_projs_bias' in k and len(v.shape) == 1:
                     v = v.view(4, -1)
+
+                if getattr(self, "co_selective_scan", False):
+                    k = self._remap_ckpt_keys_for_co_selective(k)
                 
                 new_state_dict[k] = v
             state_dict = new_state_dict
