@@ -509,6 +509,17 @@ def cross_selective_scan(
     return (y.to(x.dtype) if to_dtype else y)
 
 
+def _stabilize_decoupled_scan_tensors(dts: torch.Tensor, Bs: torch.Tensor, Cs: torch.Tensor):
+    """协同扫描支路：在送入 selective_scan 前钳制 Δ/B/C，避免 softplus/exp 路径爆炸与 nan。"""
+    dts = torch.nan_to_num(dts, nan=0.0, posinf=25.0, neginf=-25.0)
+    Bs = torch.nan_to_num(Bs, nan=0.0, posinf=15.0, neginf=-15.0)
+    Cs = torch.nan_to_num(Cs, nan=0.0, posinf=15.0, neginf=-15.0)
+    dts = torch.clamp(dts, -30.0, 30.0)
+    Bs = torch.clamp(Bs, -20.0, 20.0)
+    Cs = torch.clamp(Cs, -20.0, 20.0)
+    return dts, Bs, Cs
+
+
 def cross_selective_scan_decoupled_u_param(
     x_u: torch.Tensor,
     x_param: torch.Tensor,
@@ -576,6 +587,7 @@ def cross_selective_scan_decoupled_u_param(
             groups=K,
         )
         dts, Bs, Cs = torch.split(x_dbl.view(B, -1, L), [D, 4 * N, 4 * N], dim=1)
+        dts, Bs, Cs = _stabilize_decoupled_scan_tensors(dts, Bs, Cs)
         xs = CrossScan.apply(x_u)
         dts = CrossScan.apply(dts)
     elif no_einsum:
@@ -588,6 +600,7 @@ def cross_selective_scan_decoupled_u_param(
         )
         dts, Bs, Cs = torch.split(x_dbl.view(B, K, -1, L), [R, N, N], dim=2)
         dts = F.conv1d(dts.contiguous().view(B, -1, L), dt_projs_weight.view(K * D, -1, 1), groups=K)
+        dts, Bs, Cs = _stabilize_decoupled_scan_tensors(dts, Bs, Cs)
         xs = CrossScan.apply(x_u)
     else:
         xs_p = CrossScan.apply(x_param)
@@ -596,6 +609,7 @@ def cross_selective_scan_decoupled_u_param(
             x_dbl = x_dbl + x_proj_bias.view(1, K, -1, 1)
         dts, Bs, Cs = torch.split(x_dbl, [R, N, N], dim=2)
         dts = torch.einsum("b k r l, k d r -> b k d l", dts, dt_projs_weight)
+        dts, Bs, Cs = _stabilize_decoupled_scan_tensors(dts, Bs, Cs)
         xs = CrossScan.apply(x_u)
 
     xs = xs.view(B, -1, L)
@@ -1644,6 +1658,9 @@ class CoSS2D(nn.Module):
             nn.Conv2d(c2, c2, kernel_size=3, padding=1, groups=c2, bias=False),
             nn.Conv2d(c2, self.d_inner, kernel_size=1, bias=False),
         )
+        # cat 融合后立刻做 LayerNorm，再 Tanh 限幅 + 可学习小增益，抑制 B/C/Δ 投影前的剧烈波动
+        self.param_ln = LayerNorm2d(self.d_inner)
+        self.param_stab = nn.Parameter(torch.tensor(0.25))
 
     def _inner(self, x: torch.Tensor):
         """复现 SS2D.forwardv2 中 in_proj → conv2d → act 之前的状态，得到 (u, z)。"""
@@ -1684,6 +1701,8 @@ class CoSS2D(nn.Module):
         # 计算 T1 的 B、C、Δ 时融入 T2；计算 T2 时融入 T1（顺序互换）
         f12 = self.param_fuse(torch.cat([u1, u2], dim=1))
         f21 = self.param_fuse(torch.cat([u2, u1], dim=1))
+        f12 = torch.tanh(self.param_ln(f12)) * self.param_stab
+        f21 = torch.tanh(self.param_ln(f21)) * self.param_stab
         y1 = self._scan_branch(u1, f12, z1)
         y2 = self._scan_branch(u2, f21, z2)
         return y1, y2
@@ -1737,6 +1756,10 @@ class Co_VSSBlock(nn.Module):
         self.mlp_branch = mlp_ratio > 0
         self.use_checkpoint = use_checkpoint
         self.post_norm = post_norm
+        self.channel_first = channel_first
+        # 深层残差 LayerScale：小初始化，缓和协同块输出幅值
+        self.layer_scale_ssm = nn.Parameter(torch.ones(hidden_dim) * 1e-2)
+        self.layer_scale_mlp = nn.Parameter(torch.ones(hidden_dim) * 1e-2)
 
         if self.ssm_branch:
             self.norm = norm_layer(hidden_dim)
@@ -1769,22 +1792,32 @@ class Co_VSSBlock(nn.Module):
             )
 
     def _forward(self, x1: torch.Tensor, x2: torch.Tensor):
+        ls_s = (
+            self.layer_scale_ssm.view(1, -1, 1, 1)
+            if self.channel_first
+            else self.layer_scale_ssm.view(1, 1, 1, -1)
+        )
+        ls_m = (
+            self.layer_scale_mlp.view(1, -1, 1, 1)
+            if self.channel_first
+            else self.layer_scale_mlp.view(1, 1, 1, -1)
+        )
         if self.ssm_branch:
             if self.post_norm:
                 o1, o2 = self.op(x1, x2)
-                x1 = x1 + self.drop_path(self.norm(o1))
-                x2 = x2 + self.drop_path(self.norm(o2))
+                x1 = x1 + self.drop_path(self.norm(o1) * ls_s)
+                x2 = x2 + self.drop_path(self.norm(o2) * ls_s)
             else:
                 o1, o2 = self.op(self.norm(x1), self.norm(x2))
-                x1 = x1 + self.drop_path(o1)
-                x2 = x2 + self.drop_path(o2)
+                x1 = x1 + self.drop_path(o1 * ls_s)
+                x2 = x2 + self.drop_path(o2 * ls_s)
         if self.mlp_branch:
             if self.post_norm:
-                x1 = x1 + self.drop_path(self.norm2(self.mlp(x1)))
-                x2 = x2 + self.drop_path(self.norm2(self.mlp(x2)))
+                x1 = x1 + self.drop_path(self.norm2(self.mlp(x1)) * ls_m)
+                x2 = x2 + self.drop_path(self.norm2(self.mlp(x2)) * ls_m)
             else:
-                x1 = x1 + self.drop_path(self.mlp(self.norm2(x1)))
-                x2 = x2 + self.drop_path(self.mlp(self.norm2(x2)))
+                x1 = x1 + self.drop_path(self.mlp(self.norm2(x1)) * ls_m)
+                x2 = x2 + self.drop_path(self.mlp(self.norm2(x2)) * ls_m)
         return x1, x2
 
     def forward(self, x1: torch.Tensor, x2: torch.Tensor):

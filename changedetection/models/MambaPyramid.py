@@ -115,9 +115,16 @@ class SynergisticHighOrderInteractionModule(nn.Module):
         self.proj_t1 = nn.Conv2d(in_channels, inter_channels, kernel_size=1, bias=False)
         self.proj_t2 = nn.Conv2d(in_channels, inter_channels, kernel_size=1, bias=False)
 
+        # einsum 前：LayerNorm + L2，抑制外积幅值爆炸
+        self.pre_ln_x1 = LayerNorm2d(inter_channels)
+        self.pre_ln_x2 = LayerNorm2d(inter_channels)
+
         # 高阶双线性交互（输出通道为 d*d，之后再用 1x1 降回 2C）
         self.norm_pair = LayerNorm2d(inter_channels * inter_channels)
         self.inter_proj = nn.Conv2d(inter_channels * inter_channels, out_channels, kernel_size=1, bias=False)
+
+        # 外积后、1x1 降维前：可学习增益，削弱训练初期高阶项
+        self.ho_gain = nn.Parameter(torch.tensor(0.1))
 
         # 残差路径：直接把 P1/P2 投影到 2C 并相加（不使用 concat/差作为主交互）
         self.res_t1 = nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False)
@@ -126,6 +133,8 @@ class SynergisticHighOrderInteractionModule(nn.Module):
         self.norm_out = LayerNorm2d(out_channels)
         self.act = nn.GELU()
         self.drop = nn.Dropout(dropout) if dropout and dropout > 0.0 else nn.Identity()
+        # 融合支路 LayerScale，避免高阶支路主导梯度
+        self.merge_scale = nn.Parameter(torch.ones(out_channels) * 0.5)
 
     def forward(self, P1: torch.Tensor, P2: torch.Tensor) -> torch.Tensor:
         # P1/P2 必须同形状，且 H/W 不允许被改变
@@ -133,28 +142,28 @@ class SynergisticHighOrderInteractionModule(nn.Module):
             raise ValueError(f"P1/P2 shape mismatch: {P1.shape} vs {P2.shape}")
 
         B, C, H, W = P1.shape
+        eps = 1e-6
 
         # 通道投影到交互空间
         x1 = self.proj_t1(P1)  # (B, d, H, W)
         x2 = self.proj_t2(P2)  # (B, d, H, W)
-
-        # 归一化有助于稳定高阶协方差/外积的尺度
-        x1 = F.normalize(x1, dim=1)
-        x2 = F.normalize(x2, dim=1)
+        x1 = self.pre_ln_x1(x1)
+        x2 = self.pre_ln_x2(x2)
+        x1 = F.normalize(x1, dim=1, eps=eps)
+        x2 = F.normalize(x2, dim=1, eps=eps)
 
         # 二阶双线性池化/协方差风格交互（局部外积，保留 H/W）
-        # interaction[b, d, e, h, w] = x1[b,d,h,w] * x2[b,e,h,w]
         interaction = torch.einsum("b d h w, b e h w -> b d e h w", x1, x2)  # (B, d, d, H, W)
-        interaction = interaction.reshape(B, self.inter_channels * self.inter_channels, H, W)  # (B, d*d, H, W)
-
+        interaction = interaction.reshape(B, self.inter_channels * self.inter_channels, H, W)
+        interaction = torch.nan_to_num(interaction, nan=0.0, posinf=1e4, neginf=-1e4)
+        interaction = interaction * self.ho_gain
         interaction = self.norm_pair(interaction)
         interaction = self.inter_proj(interaction)  # (B, 2C, H, W)
         interaction = self.drop(interaction)
 
-        # 残差稳定训练：将 P1/P2 分别投影到 2C 并相加
         residual = self.res_t1(P1) + self.res_t2(P2)  # (B, 2C, H, W)
-
-        out = interaction + residual
+        ms = self.merge_scale.view(1, -1, 1, 1)
+        out = residual + interaction * ms
         out = self.norm_out(out)
         out = self.act(out)
         return out
