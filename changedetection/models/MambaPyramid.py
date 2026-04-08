@@ -33,7 +33,53 @@ import torch
 import torch.nn as nn
 import timm
 import torchvision.models as models
+import importlib.util
+import sys
+import types
 # Load MiT-B0 model (SegFormer backbone)
+
+
+def _load_hoi_interaction_class():
+    root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    hoi_dir = os.path.join(root_dir, "HOIF-main")
+
+    package_name = "hoif_main"
+    if package_name not in sys.modules:
+        package = types.ModuleType(package_name)
+        package.__path__ = [hoi_dir]
+        sys.modules[package_name] = package
+
+    for submodule in ("modules", "refine", "highorder"):
+        full_name = f"{package_name}.{submodule}"
+        if full_name in sys.modules:
+            continue
+        module_file = os.path.join(hoi_dir, f"{submodule}.py")
+        spec = importlib.util.spec_from_file_location(full_name, module_file)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Cannot load HOI module from: {module_file}")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[full_name] = module
+        spec.loader.exec_module(module)
+
+    return sys.modules[f"{package_name}.highorder"].highOrderInteraction
+
+
+class HOI_Fusion_Adapter(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+        high_order_interaction = _load_hoi_interaction_class()
+        self.hoi = high_order_interaction(channelin=in_channels, channelout=in_channels)
+        self.align = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True),
+        )
+
+    def forward(self, feat_T1, feat_T2):
+        hoi_feat, _ = self.hoi(feat_T1, feat_T2, 0, 1)
+        return self.align(hoi_feat)
+
+
 class SwinFPN(nn.Module):
     def __init__(self,dim):
         super(SwinFPN, self).__init__()
@@ -143,6 +189,10 @@ class MambaPyramid(nn.Module):
             **clean_kwargs
         )
 
+        self.fusion_adapters = nn.ModuleList(
+            [HOI_Fusion_Adapter(in_channels=dim, out_channels=2 * dim) for dim in self.encoder.dims]
+        )
+
         self.main_clf = nn.Conv2d(in_channels=128*2, out_channels=2, kernel_size=1)
         self.ds = nn.ModuleList([])
         for i in range(self.depth-1):
@@ -160,7 +210,7 @@ class MambaPyramid(nn.Module):
         post_features = self.encoder(post_data)
         feature = []
         for index in range(len(pre_features)):
-            feature.append(torch.cat([pre_features[index],post_features[index]],dim=1))
+            feature.append(self.fusion_adapters[index](pre_features[index], post_features[index]))
         output,output_ds = self.decoder(feature)
         output = self.main_clf(output)
         for i in range(self.depth-1):
