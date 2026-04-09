@@ -6,8 +6,15 @@ class Evaluator(object):
         self.num_class = num_class
         self.confusion_matrix = np.zeros((self.num_class,) * 2, dtype=np.longlong)
 
+    @staticmethod
+    def _safe_divide(numerator, denominator):
+        if denominator == 0:
+            return 0.0
+        return numerator / denominator
+
     def Pixel_Accuracy(self):
-        Acc = np.diag(self.confusion_matrix).sum() / self.confusion_matrix.sum()
+        total = self.confusion_matrix.sum()
+        Acc = self._safe_divide(np.diag(self.confusion_matrix).sum(), total)
         return Acc
 
     def Pixel_Accuracy_Class(self):
@@ -17,19 +24,21 @@ class Evaluator(object):
 
     def Pixel_Precision_Rate(self):
         assert self.confusion_matrix.shape[0] == 2
-        Pre = self.confusion_matrix[1, 1] / (self.confusion_matrix[0, 1] + self.confusion_matrix[1, 1])
+        denominator = self.confusion_matrix[0, 1] + self.confusion_matrix[1, 1]
+        Pre = self._safe_divide(self.confusion_matrix[1, 1], denominator)
         return Pre
 
     def Pixel_Recall_Rate(self):
         assert self.confusion_matrix.shape[0] == 2
-        Rec = self.confusion_matrix[1, 1] / (self.confusion_matrix[1, 0] + self.confusion_matrix[1, 1])
+        denominator = self.confusion_matrix[1, 0] + self.confusion_matrix[1, 1]
+        Rec = self._safe_divide(self.confusion_matrix[1, 1], denominator)
         return Rec
 
     def Pixel_F1_score(self):
         assert self.confusion_matrix.shape[0] == 2
         Rec = self.Pixel_Recall_Rate()
         Pre = self.Pixel_Precision_Rate()
-        F1 = 2 * Rec * Pre / (Rec + Pre)
+        F1 = self._safe_divide(2 * Rec * Pre, Rec + Pre)
         return F1
 
 
@@ -55,30 +64,20 @@ class Evaluator(object):
         return MIoU
 
     def Intersection_over_Union(self):
-        IoU = self.confusion_matrix[1, 1] / (
-                self.confusion_matrix[0, 1] + self.confusion_matrix[1, 0] + self.confusion_matrix[1, 1])
+        denominator = self.confusion_matrix[0, 1] + self.confusion_matrix[1, 0] + self.confusion_matrix[1, 1]
+        IoU = self._safe_divide(self.confusion_matrix[1, 1], denominator)
         return IoU
 
     def Kappa_coefficient(self):
-        # Number of observations (total number of classifications)
-        # num_total = np.array(0, dtype=np.long)
-        # row_sums = np.array([0, 0], dtype=np.long)
-        # col_sums = np.array([0, 0], dtype=np.long)
-        # total += np.sum(self.confusion_matrix)
-        # # Observed agreement (i.e., sum of diagonal elements)
-        # observed_agreement = np.sum(np.diag(self.confusion_matrix))
-        # # Compute expected agreement
-        # row_sums += np.sum(self.confusion_matrix, axis=0)
-        # col_sums += np.sum(self.confusion_matrix, axis=1)
-        # expected_agreement = np.sum((row_sums * col_sums) / total)
         num_total = np.sum(self.confusion_matrix)
-        observed_accuracy = np.trace(self.confusion_matrix) / num_total
+        if num_total == 0:
+            return 0.0
+
+        observed_accuracy = self._safe_divide(np.trace(self.confusion_matrix), num_total)
         expected_accuracy = np.sum(
             np.sum(self.confusion_matrix, axis=0) / num_total * np.sum(self.confusion_matrix, axis=1) / num_total)
 
-        # Calculate Cohen's kappa
-        kappa = (observed_accuracy - expected_accuracy) / (1 - expected_accuracy)
-        return kappa
+        return self._safe_divide(observed_accuracy - expected_accuracy, 1 - expected_accuracy)
 
     def Frequency_Weighted_Intersection_over_Union(self):
         freq = np.sum(self.confusion_matrix, axis=1) / np.sum(self.confusion_matrix)

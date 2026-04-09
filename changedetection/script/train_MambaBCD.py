@@ -19,6 +19,13 @@ from changedetection.utils_func.metrics import Evaluator
 from changedetection.models.MambaPyramid import MambaPyramid
 
 import changedetection.utils_func.lovasz_loss as L
+
+
+def safe_cross_entropy(logits, labels, ignore_index=255):
+    valid_mask = labels.ne(ignore_index)
+    if not torch.any(valid_mask):
+        return logits.sum() * 0.0
+    return F.cross_entropy(logits, labels, ignore_index=ignore_index)
 class Trainer(object):
     def __init__(self, args):
         self.args = args
@@ -124,11 +131,11 @@ class Trainer(object):
             self.optim.zero_grad()
             with torch.amp.autocast('cuda'):
                 output_1,ds_feature = self.deep_model(pre_change_imgs, post_change_imgs)
-                ce_loss_1 = F.cross_entropy(output_1, labels, ignore_index=255)
+                ce_loss_1 = safe_cross_entropy(output_1, labels, ignore_index=255)
                 ce_loss_ds = 0
                 lovasz_loss = 0
                 for index in range(len(ds_feature)):
-                    ce_loss_ds += F.cross_entropy(ds_feature[index], labels, ignore_index=255)*index/4
+                    ce_loss_ds += safe_cross_entropy(ds_feature[index], labels, ignore_index=255)*index/4
                     # 强制在计算 lovasz_loss 前转为 float32，避免底层的 torch.dot 在 fp16 下崩溃
                     lovasz_loss += L.lovasz_softmax(F.softmax(ds_feature[index].float(), dim=1), labels, ignore=255)*index/4
                 lovasz_loss += L.lovasz_softmax(F.softmax(output_1.float(), dim=1), labels, ignore=255)
@@ -187,11 +194,11 @@ class Trainer(object):
                 
                 with torch.amp.autocast('cuda'):
                     output_1,ds_feature = self.deep_model(pre_change_imgs, post_change_imgs)              
-                    ce_loss_1 = F.cross_entropy(output_1, labels, ignore_index=255)
+                    ce_loss_1 = safe_cross_entropy(output_1, labels, ignore_index=255)
                     ce_loss_ds = 0
                     lovasz_loss = 0
                     for index in range(len(ds_feature)):
-                        ce_loss_ds += F.cross_entropy(ds_feature[index], labels, ignore_index=255)*index/2
+                        ce_loss_ds += safe_cross_entropy(ds_feature[index], labels, ignore_index=255)*index/2
                         lovasz_loss += L.lovasz_softmax(F.softmax(ds_feature[index].float(), dim=1), labels, ignore=255)*index/2
                     lovasz_loss += L.lovasz_softmax(F.softmax(output_1.float(), dim=1), labels, ignore=255)
                     main_loss = ce_loss_1 + 0.75 * lovasz_loss + ce_loss_ds
