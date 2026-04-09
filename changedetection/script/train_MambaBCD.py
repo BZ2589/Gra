@@ -140,6 +140,10 @@ class Trainer(object):
             self.writer.add_scalar(tag="final_loss",scalar_value=final_loss.item(),global_step=itera+1)
             
             self.scaler.scale(final_loss).backward()
+            # AMP-safe global gradient clipping:
+            # unscale -> clip -> step
+            self.scaler.unscale_(self.optim)
+            torch.nn.utils.clip_grad_norm_(self.deep_model.parameters(), max_norm=1.0)
             self.scaler.step(self.optim)
             self.scaler.update()
             

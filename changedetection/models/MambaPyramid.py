@@ -69,6 +69,14 @@ class HOI_Fusion_Adapter(nn.Module):
         super().__init__()
         high_order_interaction = _load_hoi_interaction_class()
         self.hoi = high_order_interaction(channelin=in_channels, channelout=in_channels)
+        # Gain control for cold start stability (suppress HOI magnitude early).
+        self.ho_gain = nn.Parameter(torch.tensor(0.01, dtype=torch.float32))
+
+        # Pre-normalization to keep features in a safe range before high-order ops.
+        # Using GroupNorm(1, C) as a stable channel-wise LayerNorm2d-like alternative.
+        self.pre_norm_t1 = nn.GroupNorm(1, in_channels, eps=1e-6, affine=True)
+        self.pre_norm_t2 = nn.GroupNorm(1, in_channels, eps=1e-6, affine=True)
+
         self.align = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False),
             nn.BatchNorm2d(out_channels),
@@ -76,7 +84,20 @@ class HOI_Fusion_Adapter(nn.Module):
         )
 
     def forward(self, feat_T1, feat_T2):
+        # Pre-Norm + L2 normalization to prevent magnitude explosion.
+        feat_T1 = self.pre_norm_t1(feat_T1)
+        feat_T2 = self.pre_norm_t2(feat_T2)
+        feat_T1 = F.normalize(feat_T1, p=2.0, dim=1, eps=1e-6)
+        feat_T2 = F.normalize(feat_T2, p=2.0, dim=1, eps=1e-6)
+
         hoi_feat, _ = self.hoi(feat_T1, feat_T2, 0, 1)
+
+        # Physical interception: block NaN/Inf from polluting downstream network.
+        hoi_feat = torch.nan_to_num(hoi_feat, nan=0.0, posinf=1e4, neginf=-1e4)
+
+        # Learnable gain control before projection back to 2C channels.
+        hoi_feat = hoi_feat * self.ho_gain
+
         return self.align(hoi_feat)
 
 
