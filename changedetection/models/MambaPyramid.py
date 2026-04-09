@@ -84,21 +84,25 @@ class HOI_Fusion_Adapter(nn.Module):
         )
 
     def forward(self, feat_T1, feat_T2):
-        # Pre-Norm + L2 normalization to prevent magnitude explosion.
-        feat_T1 = self.pre_norm_t1(feat_T1)
-        feat_T2 = self.pre_norm_t2(feat_T2)
-        feat_T1 = F.normalize(feat_T1, p=2.0, dim=1, eps=1e-6)
-        feat_T2 = F.normalize(feat_T2, p=2.0, dim=1, eps=1e-6)
+        orig_dtype = feat_T1.dtype
 
-        hoi_feat, _ = self.hoi(feat_T1, feat_T2, 0, 1)
+        # Force high-order interaction to run in FP32 to avoid AMP/FP16 overflow.
+        with torch.autocast(device_type='cuda', enabled=False):
+            # Pre-Norm + L2 normalization to prevent magnitude explosion.
+            feat_T1 = self.pre_norm_t1(feat_T1.float())
+            feat_T2 = self.pre_norm_t2(feat_T2.float())
+            feat_T1 = F.normalize(feat_T1, p=2.0, dim=1, eps=1e-6)
+            feat_T2 = F.normalize(feat_T2, p=2.0, dim=1, eps=1e-6)
 
-        # Physical interception: block NaN/Inf from polluting downstream network.
-        hoi_feat = torch.nan_to_num(hoi_feat, nan=0.0, posinf=1e4, neginf=-1e4)
+            hoi_feat, _ = self.hoi(feat_T1, feat_T2, 0, 1)
 
-        # Learnable gain control before projection back to 2C channels.
-        hoi_feat = hoi_feat * self.ho_gain
+            # Physical interception: block NaN/Inf from polluting downstream network.
+            hoi_feat = torch.nan_to_num(hoi_feat, nan=0.0, posinf=1e4, neginf=-1e4)
 
-        return self.align(hoi_feat)
+            # Learnable gain control before projection back to 2C channels.
+            hoi_feat = hoi_feat * self.ho_gain
+
+        return self.align(hoi_feat.to(orig_dtype))
 
 
 class SwinFPN(nn.Module):
