@@ -150,7 +150,7 @@ class Trainer(object):
             # AMP-safe global gradient clipping:
             # unscale -> clip -> step
             self.scaler.unscale_(self.optim)
-            torch.nn.utils.clip_grad_norm_(self.deep_model.parameters(), max_norm=1.0)
+            torch.nn.utils.clip_grad_norm_(self.deep_model.parameters(), max_norm=0.5)
             self.scaler.step(self.optim)
             self.scaler.update()
             
