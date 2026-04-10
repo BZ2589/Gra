@@ -163,7 +163,7 @@ class InvBlock(nn.Module):
 
         in_channels = channel_num
         self.invconv = InvertibleConv1x1(in_channels, LU_decomposed=True)
-        self.flow_permutation = lambda z, logdet, rev: self.invconv(z, logdet, rev)
+        self.flow_permutation = lambda z, logdet, rev: (z, logdet)
 
     def forward(self, x, rev=False):
         # if not rev:
