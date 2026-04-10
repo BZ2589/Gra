@@ -88,6 +88,7 @@ class HOI_Fusion_Adapter(nn.Module):
 
         # Force high-order interaction to run in FP32 to avoid AMP/FP16 overflow.
         with torch.autocast(device_type='cuda', enabled=False):
+            self.hoi = self.hoi.float()
             # Pre-Norm + L2 normalization to prevent magnitude explosion.
             feat_T1 = self.pre_norm_t1(feat_T1.float())
             feat_T2 = self.pre_norm_t2(feat_T2.float())

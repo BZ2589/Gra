@@ -411,7 +411,11 @@ class InvertibleConv1x1(nn.Module):
 
                 weight = torch.matmul(u_inv, torch.matmul(l_inv, p_inv))
             else:
-                weight = torch.matmul(self.p, torch.matmul(lower, u))
+                target_dtype, target_device = input.dtype, input.device
+                p_safe = self.p.to(device=target_device, dtype=target_dtype)
+                lower_safe = lower.to(device=target_device, dtype=target_dtype)
+                u_safe = u.to(device=target_device, dtype=target_dtype)
+                weight = torch.matmul(p_safe, torch.matmul(lower_safe, u_safe))
 
         return weight.view(self.w_shape[0], self.w_shape[1], 1, 1), dlogdet
 
