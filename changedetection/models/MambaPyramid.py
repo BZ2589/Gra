@@ -101,7 +101,7 @@ class HOI_Fusion_Adapter(nn.Module):
             hoi_feat = torch.nan_to_num(hoi_feat, nan=0.0, posinf=1e4, neginf=-1e4)
 
             # Learnable gain control before projection back to 2C channels.
-            hoi_feat = hoi_feat * self.ho_gain
+            hoi_feat = hoi_feat * torch.clamp(self.ho_gain, min=-2.0, max=2.0)
 
         return self.align(hoi_feat.to(orig_dtype))
 
