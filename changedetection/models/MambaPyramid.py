@@ -69,16 +69,15 @@ class HOI_Fusion_Adapter(nn.Module):
         super().__init__()
         high_order_interaction = _load_hoi_interaction_class()
         self.hoi = high_order_interaction(channelin=in_channels, channelout=in_channels)
-        # Gain control for cold start stability (suppress HOI magnitude early).
         self.ho_gain = nn.Parameter(torch.tensor(0.01, dtype=torch.float32))
 
-        # Pre-normalization to keep features in a safe range before high-order ops.
-        # Using GroupNorm(1, C) as a stable channel-wise LayerNorm2d-like alternative.
         self.pre_norm_t1 = nn.GroupNorm(1, in_channels, eps=1e-6, affine=True)
         self.pre_norm_t2 = nn.GroupNorm(1, in_channels, eps=1e-6, affine=True)
 
+        # 【修改点1】：因为我们要把高阶模块的两个输出 concat 起来
+        # 所以进入 1x1 卷积的通道数变成了 2 * in_channels
         self.align = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False),
+            nn.Conv2d(2 * in_channels, out_channels, kernel_size=1, bias=False),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
         )
@@ -86,25 +85,24 @@ class HOI_Fusion_Adapter(nn.Module):
     def forward(self, feat_T1, feat_T2):
         orig_dtype = feat_T1.dtype
 
-        # Force high-order interaction to run in FP32 to avoid AMP/FP16 overflow.
         with torch.autocast(device_type='cuda', enabled=False):
             self.hoi = self.hoi.float()
-            # Pre-Norm + L2 normalization to prevent magnitude explosion.
             feat_T1 = self.pre_norm_t1(feat_T1.float())
             feat_T2 = self.pre_norm_t2(feat_T2.float())
             feat_T1 = F.normalize(feat_T1, p=2.0, dim=1, eps=1e-6)
             feat_T2 = F.normalize(feat_T2, p=2.0, dim=1, eps=1e-6)
 
-            hoi_feat, _ = self.hoi(feat_T1, feat_T2, 0, 1)
+            # 【修改点2】：不再丢弃第二个特征，用 feat_t1_fused 和 feat_t2_evolved 全部接收
+            feat_t1_fused, feat_t2_evolved = self.hoi(feat_T1, feat_T2, 0, 1)
 
-            # Physical interception: block NaN/Inf from polluting downstream network.
+            # 【修改点3】：将双时相的高阶特征拼接 (B, 2C, H, W)
+            hoi_feat = torch.cat([feat_t1_fused, feat_t2_evolved], dim=1)
+
             hoi_feat = torch.nan_to_num(hoi_feat, nan=0.0, posinf=1e4, neginf=-1e4)
-
-            # Learnable gain control before projection back to 2C channels.
             hoi_feat = hoi_feat * torch.clamp(self.ho_gain, min=0.0, max=1.0)
-            # 转 FP16 前绝对防御，防止瞬间溢出 Inf
             hoi_feat = torch.clamp(hoi_feat, min=-60000.0, max=60000.0)
 
+        # 映射回解码器需要的 out_channels
         return self.align(hoi_feat.to(orig_dtype))
 
 
