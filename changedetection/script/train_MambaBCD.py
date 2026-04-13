@@ -258,7 +258,7 @@ def main():
     parser.add_argument('--train_name', type=str, default=None, help='name for the training run, used for creating save directory')
 
     parser.add_argument('--resume', type=str)
-    parser.add_argument('--learning_rate', type=float, default=5e-5)
+    parser.add_argument('--learning_rate', type=float, default=1e-5)
     parser.add_argument('--momentum', type=float, default=0.9)
     parser.add_argument('--weight_decay', type=float, default=4e-4)
 
