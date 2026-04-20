@@ -495,9 +495,11 @@ class highOrderInteraction(nn.Module):
     def forward(self, vis_y, inf, i, j):
 
         vis_spa, inf_spa = self.spatial(vis_y, inf, i, j)
-        vis_cha, inf_cha = self.channel(vis_spa, inf_spa, i, j)
+
+        # 不进行通道交互
+        # vis_cha, inf_cha = self.channel(vis_spa, inf_spa, i, j)
         
-        return vis_cha, inf_cha
+        return vis_spa, inf_spa
     
 
 # class EdgeBlock(nn.Module):
