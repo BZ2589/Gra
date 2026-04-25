@@ -80,3 +80,6 @@ changedetection/pretrained_weight/model.safetensors
 __pycache__/
 *.py[cod]
 *$py.class
+
+# 忽略所有 datasets 文件夹（包含所有子内容）
+**/datasets/
