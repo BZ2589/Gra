@@ -13,7 +13,7 @@ import argparse
 from tqdm import tqdm  # 加入进度条
 
 from changedetection.configs.config import get_config
-from changedetection.models.MambaPyramid import MambaPyramid
+from changedetection.models.MambaPyramid_high002 import MambaPyramid
 
 class TestDataset(Dataset):
     def __init__(self, root_dir, transform=None):
@@ -176,5 +176,5 @@ def main(pth_path):
 
 if __name__ == '__main__':
     # 【修改点3】：Linux 环境下的路径，使用正斜杠
-    pth_path = 'changedetection/saved_models/LEVIR-CD/baseline_base_levir_drop=0_levircd_base003/90500_model.pth'
+    pth_path = 'changedetection/saved_models/LEVIR-CD/baseline_base_levir_drop=0_levircd_hight007/94000_model.pth'
     main(pth_path)
