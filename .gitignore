@@ -83,3 +83,6 @@ __pycache__/
 
 # 忽略所有 datasets 文件夹（包含所有子内容）
 **/datasets/
+
+# 忽略可视化生成的测试结果图
+visual_results/
