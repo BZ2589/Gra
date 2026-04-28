@@ -165,9 +165,16 @@ class Trainer(object):
                         f.write(f'{itera + 1},{rec},{pre},{oa},{f1_score},{iou},{kc}\n')
                         
                     if kc > best_kc:
+                        # 新增逻辑：如果之前已经保存过最优模型，先把旧的删了腾空间
+                        if best_kc > 0.0:  
+                            old_model_path = os.path.join(self.model_save_path, f'{best_iter}_model.pth')
+                            if os.path.exists(old_model_path):
+                                os.remove(old_model_path)
+
+                        # 原有逻辑：保存当前最新的最优模型
                         torch.save(self.deep_model.state_dict(),
                                    os.path.join(self.model_save_path, f'{itera + 1}_model.pth'))
-                        best_iter = itera+1
+                        best_iter = itera + 1
                         best_kc = kc
                         best_round = [rec, pre, oa, f1_score, iou, kc]
                     print('best round:',best_round)
