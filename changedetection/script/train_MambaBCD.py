@@ -118,6 +118,13 @@ class Trainer(object):
         csv_path = os.path.join(self.model_save_path, 'metrics.csv')
         with open(csv_path, 'w', newline='') as f:
             f.write('iter,rec,pre,oa,f1_score,iou,kc\n')
+
+        # === 新增：初始化记录训练 loss 的 CSV ===
+        loss_csv_path = os.path.join(self.model_save_path, 'train_loss.csv')
+        with open(loss_csv_path, 'w', newline='') as f:
+            f.write('iter,ce_loss,ds_loss,final_loss\n')
+        # ==========================================
+
             
         train_enumerator = enumerate(self.train_data_loader)
         pbar = tqdm(range(elem_num), disable=not sys.stdout.isatty())
@@ -160,6 +167,13 @@ class Trainer(object):
             
             if (itera + 1) % 10 == 0:
                 pbar.set_postfix({'loss': f'{final_loss.item():.4f}'})
+
+                # === 新增：每 10 轮把当前的所有 Loss 写入 CSV ===
+                with open(loss_csv_path, 'a', newline='') as f:
+                    ds_loss_val = ce_loss_ds.item() if isinstance(ce_loss_ds, torch.Tensor) else ce_loss_ds
+                    f.write(f'{itera + 1},{ce_loss_1.item():.6f},{ds_loss_val:.6f},{final_loss.item():.6f}\n')
+                # ==============================================
+
                 if (itera + 1) % 500 == 0:
                     self.deep_model.eval()
                     rec, pre, oa, f1_score, iou, kc = self.validation(iter=itera)
@@ -269,7 +283,7 @@ def main():
     parser.add_argument('--train_name', type=str, default=None, help='name for the training run, used for creating save directory')
 
     parser.add_argument('--resume', type=str)
-    parser.add_argument('--learning_rate', type=float, default=1e-4)
+    parser.add_argument('--learning_rate', type=float, default=1e-5)
     parser.add_argument('--momentum', type=float, default=0.9)
     parser.add_argument('--weight_decay', type=float, default=4e-4)
 
