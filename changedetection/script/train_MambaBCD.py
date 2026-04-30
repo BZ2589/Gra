@@ -101,7 +101,8 @@ class Trainer(object):
                                  weight_decay=args.weight_decay)
         self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
                         self.optim,               # 优化器
-                        T_max=10000,             # 学习率下限
+                        T_max=args.max_iters,             # 学习率下限
+                        # 将学习率改成max_iters而不是一个固定的10000
                     )
         self.scaler = torch.amp.GradScaler('cuda')
 
@@ -153,6 +154,9 @@ class Trainer(object):
             torch.nn.utils.clip_grad_norm_(self.deep_model.parameters(), max_norm=0.5)
             self.scaler.step(self.optim)
             self.scaler.update()
+            # 他scheduler.step()  # 将学习率调度器的更新放在 optimizer.step() 之后，
+            # 确保每次迭代都正确更新学习率
+            self.scheduler.step()
             
             if (itera + 1) % 10 == 0:
                 pbar.set_postfix({'loss': f'{final_loss.item():.4f}'})
@@ -211,7 +215,7 @@ class Trainer(object):
                     main_loss = ce_loss_1 + 0.75 * lovasz_loss + ce_loss_ds
                     final_loss = main_loss
                     
-                self.scheduler.step()
+                # self.scheduler.step()
                 output_1 = output_1.float() # 确保后续转换为 numpy 时是 float32 类型
                 output_1 = output_1.data.cpu().numpy()
                 output_1 = np.argmax(output_1, axis=1)
