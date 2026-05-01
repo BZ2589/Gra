@@ -101,8 +101,8 @@ class Trainer(object):
                                  weight_decay=args.weight_decay)
         self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
                         self.optim,               # 优化器
-                        T_max=args.max_iters,             # 学习率下限
-                        # 将学习率改成max_iters而不是一个固定的10000
+                        T_max=len(self.train_data_loader),             # 学习率下限
+                        # 将学习率改成len(self.train_data_loader)而不是一个固定的10000
                     )
         self.scaler = torch.amp.GradScaler('cuda')
 
