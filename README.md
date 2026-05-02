@@ -9,7 +9,7 @@
 1.  **`RUN_NAME` (必需)**：训练运行的名称。这个名称将用于创建日志和保存模型的目录，以便于区分不同的训练实验。例如：`levircd_base001`。
 2.  **`GPU_ID` (可选)**：指定用于训练的 GPU 设备 ID。如果你有多个 GPU，可以通过这个参数选择使用哪一个。如果未提供此参数，脚本将默认使用 `0` 号 GPU。
 
-### 如何运行训练命令
+## 如何运行训练命令
 
 请在项目根目录下执行以下命令来启动训练：
 
@@ -20,25 +20,26 @@ bash changedetection/script/run/train_levircd.sh <RUN_NAME> [GPU_ID]
 **示例：**
 
 *   **在 `0` 号 GPU 上运行名为 `levircd_base001` 的训练：**
-    ```bash
+```bash
 bash changedetection/script/run/train_levircd.sh levircd_base001
-    ```
+```
 
 *   **在 `1` 号 GPU 上运行名为 `levircd_base002` 的训练：**
-    ```bash
+```bash
 bash changedetection/script/run/train_levircd.sh levircd_base002 1
-    ```
+```
 
 请确保在运行训练之前，所有必要的依赖项都已安装，并且数据集路径配置正确。
 
-*   **启动显卡监控脚本**
+## **启动显卡监控脚本**
 **启动之前记得修改脚本内训练名称**
-    ```bash
+```bash
 nohup bash watch_gpu.sh > sniper_dual.log 2>&1 &
-    ```
+tail -f sniper_dual.log # 查看监控程序日志
+```
 
-*   **SSH 连接**
-    ```bash
+## **SSH 连接**
+```bash
 ssh z@10.59.85.10
 cd /media/z/1d115f79-c4ea-4c62-9376-98541627908c/LH/Gra
-    ```
+```
