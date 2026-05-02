@@ -30,3 +30,9 @@ bash changedetection/script/run/train_levircd.sh levircd_base002 1
     ```
 
 请确保在运行训练之前，所有必要的依赖项都已安装，并且数据集路径配置正确。
+
+*   **启动显卡监控脚本**
+**启动之前记得修改脚本内训练名称**
+    ```bash
+nohup bash watch_gpu.sh > sniper_dual.log 2>&1 &
+    ```
