@@ -216,7 +216,7 @@ class MambaPyramid(nn.Module):
         )
 
         self.fusion_adapters = nn.ModuleList(
-            [HOI_Fusion_Adapter(in_channels=dim, out_channels=2 * dim) for dim in self.encoder.dims[1:]]
+            [HOI_Fusion_Adapter(in_channels=dim, out_channels=2 * dim) for dim in self.encoder.dims]
         )
 
         self.main_clf = nn.Conv2d(in_channels=128*2, out_channels=2, kernel_size=1)
