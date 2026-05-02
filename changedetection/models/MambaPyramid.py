@@ -234,9 +234,16 @@ class MambaPyramid(nn.Module):
         # Encoder processing
         pre_features = self.encoder(pre_data)
         post_features = self.encoder(post_data)
-        feature = []
-        for index in range(len(pre_features)):
-            feature.append(self.fusion_adapters[index](pre_features[index], post_features[index]))
+        
+        # 新增：直接把原始的 1/4 特征图原封不动地塞进列表开头当占位符
+        # 这样下游获取 feature[0].shape 就不会报错
+        feature = [pre_features[0]] 
+        
+        # 从 1 开始遍历后三个尺度进行高阶交互
+        for index in range(1, len(pre_features)):
+            # 注意：fusion_adapters 的长度现在只有 3，所以这里的索引要写 index - 1
+            feature.append(self.fusion_adapters[index - 1](pre_features[index], post_features[index]))
+
         output,output_ds = self.decoder(feature)
         output = self.main_clf(output)
         for i in range(self.depth-1):

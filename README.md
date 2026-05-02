@@ -36,3 +36,9 @@ bash changedetection/script/run/train_levircd.sh levircd_base002 1
     ```bash
 nohup bash watch_gpu.sh > sniper_dual.log 2>&1 &
     ```
+
+*   **SSH 连接**
+    ```bash
+ssh z@10.59.85.10
+cd /media/z/1d115f79-c4ea-4c62-9376-98541627908c/LH/Gra
+    ```
