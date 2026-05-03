@@ -293,13 +293,6 @@ class spatialInteraction(nn.Module):
         self.norm3 = LayerNorm(channelout, LayerNorm_type='WithBias')
         self.norm4 = LayerNorm(channelout, LayerNorm_type='WithBias')
         
-        # 新增：专门用于压制第四次乘法产生的极端方差
-        self.norm5 = LayerNorm(channelout, LayerNorm_type='WithBias')
-
-        # 新增：对输出前的 convf 进行零初始化
-        nn.init.constant_(self.convf[0].weight, 0)
-        if self.convf[0].bias is not None:
-            nn.init.constant_(self.convf[0].bias, 0)
 
     def forward(self, vis, inf, i, j):
 
@@ -327,14 +320,7 @@ class spatialInteraction(nn.Module):
         fused_threeOrderSpa = self.norm4(fused_threeOrderSpa + self.conv3(torch.cat([fused_twoOrderSpa, fused_threeOrderSpa],dim=1)))
         infraredReflash3 = self.reflashInfrared3(infraredReflash2)
         
-        # 第四阶乘法
         fused_fourOrderSpa = fused_threeOrderSpa * infraredReflash3
-        
-        # 新增：截断第四次乘法带来的方差爆炸
-        fused_fourOrderSpa = self.norm5(fused_fourOrderSpa)
-
-        # 核心：因为 convf 被初始化为全 0，这里的 cat 就算再大，经过 convf 也会变成 0
-        # 此时 0 + vis 变成了纯正的残差保留
         fused = self.convf(torch.cat([fused_OneOrderSpa,fused_twoOrderSpa,fused_threeOrderSpa,fused_fourOrderSpa],dim=1)) + vis
 
         return fused, infraredReflash3
@@ -471,14 +457,6 @@ class channelInteraction(nn.Module):
         self.postprocess = nn.Sequential(InvBlock(DenseBlock, 2 * channelin, channelout),
                                          nn.Conv2d(2*channelout, channelout, 1, 1, 0))
         
-        # 新增：用于截断多阶通道演化带来的分布漂移（注意通道数是 channelout * 2）
-        self.norm_out = LayerNorm(channelout * 2, LayerNorm_type='WithBias')
-
-        # 新增：对 postprocess 的最后一层卷积进行零初始化
-        nn.init.constant_(self.postprocess[-1].weight, 0)
-        if self.postprocess[-1].bias is not None:
-            nn.init.constant_(self.postprocess[-1].bias, 0)
-        
     def forward(self, vis, inf, i, j):
 
         vis_cat = torch.cat([vis, inf], 1)
@@ -498,16 +476,9 @@ class channelInteraction(nn.Module):
         fused_threeOrderCha = self.reflashFused3(fused_threeOrderCha)
         chanAttenReflash3 = self.reflashChaAtten3(chanAttenReflash2).softmax(1)
         
-        # 第四阶乘法
         fused_fourOrderCha = fused_threeOrderCha * chanAttenReflash3
-
-        # 新增：在经过四阶演化后、送入后处理前，强制拉回正常方差
-        fused_fourOrderCha = self.norm_out(fused_fourOrderCha)
-
-        # 此时经过由于最后一层被零初始化了，前几个 Epoch 这里必然输出全是 0
         fused_fourOrderCha = self.postprocess(fused_fourOrderCha)
 
-        # 完美残差相加： 0 + vis = 纯正的 vis 特征透传
         fused = fused_fourOrderCha + vis
 
         return fused, inf

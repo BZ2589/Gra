@@ -33,6 +33,8 @@ class Trainer(object):
 
         self.train_data_loader = make_data_loader(args)
 
+        print(f"训练批次总数(T_max) = {len(self.train_data_loader)}")
+
         self.evaluator = Evaluator(num_class=2)
         log_suffix = args.train_name if args.train_name else str(time.time())
         self.writer = SummaryWriter(log_dir=f"./logs/{self.args.model_type}_{log_suffix}")
