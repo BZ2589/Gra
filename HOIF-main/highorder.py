@@ -292,7 +292,11 @@ class spatialInteraction(nn.Module):
         self.norm2 = LayerNorm(channelout, LayerNorm_type='WithBias')
         self.norm3 = LayerNorm(channelout, LayerNorm_type='WithBias')
         self.norm4 = LayerNorm(channelout, LayerNorm_type='WithBias')
-        
+
+        self.norm_out = nn.GroupNorm(1, channelout)
+        nn.init.constant_(self.norm_out.weight, 0.01)
+        nn.init.constant_(self.norm_out.bias, 0)
+
 
     def forward(self, vis, inf, i, j):
 
@@ -321,7 +325,8 @@ class spatialInteraction(nn.Module):
         infraredReflash3 = self.reflashInfrared3(infraredReflash2)
         
         fused_fourOrderSpa = fused_threeOrderSpa * infraredReflash3
-        fused = self.convf(torch.cat([fused_OneOrderSpa,fused_twoOrderSpa,fused_threeOrderSpa,fused_fourOrderSpa],dim=1)) + vis
+        fused = self.convf(torch.cat([fused_OneOrderSpa,fused_twoOrderSpa,fused_threeOrderSpa,fused_fourOrderSpa],dim=1))
+        fused = self.norm_out(fused) + vis
 
         return fused, infraredReflash3
 
@@ -456,7 +461,12 @@ class channelInteraction(nn.Module):
         
         self.postprocess = nn.Sequential(InvBlock(DenseBlock, 2 * channelin, channelout),
                                          nn.Conv2d(2*channelout, channelout, 1, 1, 0))
-        
+
+        self.norm_out = nn.GroupNorm(1, channelout)
+        nn.init.constant_(self.norm_out.weight, 0.01)
+        nn.init.constant_(self.norm_out.bias, 0)
+
+
     def forward(self, vis, inf, i, j):
 
         vis_cat = torch.cat([vis, inf], 1)
@@ -478,6 +488,7 @@ class channelInteraction(nn.Module):
         
         fused_fourOrderCha = fused_threeOrderCha * chanAttenReflash3
         fused_fourOrderCha = self.postprocess(fused_fourOrderCha)
+        fused_fourOrderCha = self.norm_out(fused_fourOrderCha)
 
         fused = fused_fourOrderCha + vis
 

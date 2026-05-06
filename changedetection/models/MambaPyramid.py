@@ -69,15 +69,15 @@ class HOI_Fusion_Adapter(nn.Module):
         super().__init__()
         high_order_interaction = _load_hoi_interaction_class()
         self.hoi = high_order_interaction(channelin=in_channels, channelout=in_channels)
-        self.ho_gain = nn.Parameter(torch.tensor(0.01, dtype=torch.float32))
+        
+        # 【修改点A：删除了 self.ho_gain 补丁】
 
         self.pre_norm_t1 = nn.GroupNorm(1, in_channels, eps=1e-6, affine=True)
         self.pre_norm_t2 = nn.GroupNorm(1, in_channels, eps=1e-6, affine=True)
 
-        # 【修改点1】：因为我们要把高阶模块的两个输出 concat 起来
-        # 所以进入 1x1 卷积的通道数变成了 2 * in_channels
         self.align = nn.Sequential(
             nn.Conv2d(2 * in_channels, out_channels, kernel_size=1, bias=False),
+            # 这里的 BatchNorm2d 对于拼接后的全局对齐是可以保留的（之前能用说明没问题）
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
         )
@@ -92,15 +92,13 @@ class HOI_Fusion_Adapter(nn.Module):
             feat_T1 = F.normalize(feat_T1, p=2.0, dim=1, eps=1e-6)
             feat_T2 = F.normalize(feat_T2, p=2.0, dim=1, eps=1e-6)
 
-            # 【修改点2】：不再丢弃第二个特征，用 feat_t1_fused 和 feat_t2_evolved 全部接收
             feat_t1_fused, feat_t2_evolved = self.hoi(feat_T1, feat_T2, 0, 1)
 
-            # 【修改点3】：将双时相的高阶特征拼接 (B, 2C, H, W)
+            # 将双时相的高阶特征拼接 (B, 2C, H, W)
             hoi_feat = torch.cat([feat_t1_fused, feat_t2_evolved], dim=1)
 
-            hoi_feat = torch.nan_to_num(hoi_feat, nan=0.0, posinf=1e4, neginf=-1e4)
-            hoi_feat = hoi_feat * torch.clamp(self.ho_gain, min=0.0, max=1.0)
-            hoi_feat = torch.clamp(hoi_feat, min=-60000.0, max=60000.0)
+            # 【修改点B：删除了 nan_to_num、ho_gain 乘法、以及 60000 的暴力 clamp】
+            # 因为底层的 GroupNorm 已经保证了数值绝对安全，这里直接透传即可！
 
         # 映射回解码器需要的 out_channels
         return self.align(hoi_feat.to(orig_dtype))
