@@ -100,7 +100,8 @@ class Trainer(object):
 
         self.optim = optim.AdamW(self.deep_model.parameters(),
                                  lr=args.learning_rate,
-                                 weight_decay=args.weight_decay)
+                                 weight_decay=args.weight_decay,
+                                 fused=True)
         self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
                         self.optim,               # 优化器
                         T_max=len(self.train_data_loader),             # 学习率下限
@@ -130,6 +131,7 @@ class Trainer(object):
             
         train_enumerator = enumerate(self.train_data_loader)
         pbar = tqdm(range(elem_num), disable=not sys.stdout.isatty())
+        start_time = time.time()  # 新增：记录开始时间
         for _ in pbar:
             itera, data = train_enumerator.__next__()
             pre_change_imgs, post_change_imgs, labels, _ = data
@@ -177,6 +179,13 @@ class Trainer(object):
                 # ==============================================
 
                 if (itera + 1) % 500 == 0:
+                    # 新增：计算并打印当前进度和预计剩余时间
+                    elapsed_time = time.time() - start_time
+                    avg_time_per_iter = elapsed_time / (itera + 1)
+                    eta_seconds = avg_time_per_iter * (elem_num - (itera + 1))
+                    eta_str = time.strftime("%H:%M:%S", time.gmtime(eta_seconds))
+                    print(f"当前迭代: {itera + 1}/{elem_num}, 预计剩余时间: {eta_str}")
+
                     self.deep_model.eval()
                     rec, pre, oa, f1_score, iou, kc = self.validation(iter=itera)
                     
@@ -205,6 +214,7 @@ class Trainer(object):
         self.writer.close()
         print('The accuracy of the best round is ', best_round)
         print('best iteration:',best_iter)
+        print('训练完成')
 
     def validation(self,iter):
         print('---------starting evaluation-----------')
@@ -285,7 +295,7 @@ def main():
     parser.add_argument('--train_name', type=str, default=None, help='name for the training run, used for creating save directory')
 
     parser.add_argument('--resume', type=str)
-    parser.add_argument('--learning_rate', type=float, default=1e-5)
+    parser.add_argument('--learning_rate', type=float, default=1e-4)
     parser.add_argument('--momentum', type=float, default=0.9)
     parser.add_argument('--weight_decay', type=float, default=4e-4)
 

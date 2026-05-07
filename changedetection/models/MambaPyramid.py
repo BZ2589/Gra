@@ -85,10 +85,9 @@ class HOI_Fusion_Adapter(nn.Module):
     def forward(self, feat_T1, feat_T2):
         orig_dtype = feat_T1.dtype
 
-        with torch.autocast(device_type='cuda', enabled=False):
-            self.hoi = self.hoi.float()
-            feat_T1 = self.pre_norm_t1(feat_T1.float())
-            feat_T2 = self.pre_norm_t2(feat_T2.float())
+        with torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16):
+            feat_T1 = self.pre_norm_t1(feat_T1)
+            feat_T2 = self.pre_norm_t2(feat_T2)
             feat_T1 = F.normalize(feat_T1, p=2.0, dim=1, eps=1e-6)
             feat_T2 = F.normalize(feat_T2, p=2.0, dim=1, eps=1e-6)
 
