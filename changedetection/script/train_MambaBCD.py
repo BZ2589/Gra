@@ -40,11 +40,12 @@ class Trainer(object):
         self.writer = SummaryWriter(log_dir=f"./logs/{self.args.model_type}_{log_suffix}")
         self.deep_model = MambaPyramid(
             pretrained=args.pretrained_weight_path,
-            patch_size=config.MODEL.VSSM.PATCH_SIZE, 
-            in_chans=config.MODEL.VSSM.IN_CHANS, 
-            num_classes=config.MODEL.NUM_CLASSES, 
-            depths=config.MODEL.VSSM.DEPTHS, 
-            dims=config.MODEL.VSSM.EMBED_DIM, 
+            hoi_levels=args.hoi_levels,
+            patch_size=config.MODEL.VSSM.PATCH_SIZE,
+            in_chans=config.MODEL.VSSM.IN_CHANS,
+            num_classes=config.MODEL.NUM_CLASSES,
+            depths=config.MODEL.VSSM.DEPTHS,
+            dims=config.MODEL.VSSM.EMBED_DIM,
             decoder_depths = args.decoder_depths,
             # ===================
             ssm_d_state=config.MODEL.VSSM.SSM_D_STATE,
@@ -265,6 +266,20 @@ class Trainer(object):
 
 
 def main():
+    # ============================================================
+    # 消融实验配置区：直接修改这里的数字即可切换实验
+    # 4 个数字从左到右对应 Encoder 输出的 4 个分辨率层级（从大到小）
+    #   1 = 使用 HOI_Fusion_Adapter（高阶交互融合）
+    #   0 = 使用 Bypass_Fusion_Adapter（简单拼接融合）
+    #
+    # 实验 0 (baseline): 0 0 0 0  — 全部 bypass
+    # 实验 1:            0 0 0 1  — 仅最小分辨率用 HOI
+    # 实验 2:            0 0 1 1
+    # 实验 3:            0 1 1 1
+    # 实验 4 (full HOI): 1 1 1 1  — 全部启用 HOI
+    HOI_CONFIG = [0, 0, 0, 1]  # <--- 修改这里！
+    # ============================================================
+
     parser = argparse.ArgumentParser(description="Training on SYSU/LEVIR-CD/WHU-CD/DSIFN-CD dataset")
     parser.add_argument('--cfg', type=str, default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'configs', 'vssm1', 'vssm_base_224.yaml'))
     parser.add_argument(
@@ -294,12 +309,22 @@ def main():
     parser.add_argument('--model_param_path', type=str, default='../saved_models')
     parser.add_argument('--train_name', type=str, default=None, help='name for the training run, used for creating save directory')
 
+    parser.add_argument('--hoi_levels', type=int, nargs='*', default=None,
+                        help='HOI enable flags for 4 encoder levels (resolution high->low). '
+                             '1=use HOI_Fusion_Adapter, 0=use Bypass_Fusion_Adapter. '
+                             'If not provided, uses the hardcoded HOI_CONFIG at the top of main(). '
+                             'Example: --hoi_levels 0 0 0 1')
+
     parser.add_argument('--resume', type=str)
-    parser.add_argument('--learning_rate', type=float, default=1e-4)
+    parser.add_argument('--learning_rate', type=float, default=1e-5)
     parser.add_argument('--momentum', type=float, default=0.9)
     parser.add_argument('--weight_decay', type=float, default=4e-4)
 
     args = parser.parse_args()
+
+    if args.hoi_levels is None:
+        args.hoi_levels = HOI_CONFIG
+    assert len(args.hoi_levels) == 4, f"hoi_levels must have 4 elements, got {len(args.hoi_levels)}: {args.hoi_levels}"
 
     if args.dataset=='LEVIR-CD' or args.dataset=='LEVIR-CD+':
         args.train_data_name_list = os.listdir(os.path.join(args.train_dataset_path,'A'))

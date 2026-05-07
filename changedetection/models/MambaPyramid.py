@@ -69,15 +69,12 @@ class HOI_Fusion_Adapter(nn.Module):
         super().__init__()
         high_order_interaction = _load_hoi_interaction_class()
         self.hoi = high_order_interaction(channelin=in_channels, channelout=in_channels)
-        
-        # 【修改点A：删除了 self.ho_gain 补丁】
 
         self.pre_norm_t1 = nn.GroupNorm(1, in_channels, eps=1e-6, affine=True)
         self.pre_norm_t2 = nn.GroupNorm(1, in_channels, eps=1e-6, affine=True)
 
         self.align = nn.Sequential(
             nn.Conv2d(2 * in_channels, out_channels, kernel_size=1, bias=False),
-            # 这里的 BatchNorm2d 对于拼接后的全局对齐是可以保留的（之前能用说明没问题）
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
         )
@@ -93,14 +90,25 @@ class HOI_Fusion_Adapter(nn.Module):
 
             feat_t1_fused, feat_t2_evolved = self.hoi(feat_T1, feat_T2, 0, 1)
 
-            # 将双时相的高阶特征拼接 (B, 2C, H, W)
             hoi_feat = torch.cat([feat_t1_fused, feat_t2_evolved], dim=1)
 
-            # 【修改点B：删除了 nan_to_num、ho_gain 乘法、以及 60000 的暴力 clamp】
-            # 因为底层的 GroupNorm 已经保证了数值绝对安全，这里直接透传即可！
-
-        # 映射回解码器需要的 out_channels
         return self.align(hoi_feat.to(orig_dtype))
+
+
+class Bypass_Fusion_Adapter(nn.Module):
+    """不做 HOI，仅将双时相特征拼接后映射到目标通道数。
+    用于消融实验中不需要高阶交互的层级。
+    """
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+        self.align = nn.Sequential(
+            nn.Conv2d(2 * in_channels, out_channels, kernel_size=1, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True),
+        )
+
+    def forward(self, feat_T1, feat_T2):
+        return self.align(torch.cat([feat_T1, feat_T2], dim=1))
 
 
 class SwinFPN(nn.Module):
@@ -174,33 +182,37 @@ resnet = models.resnet101(weights=models.ResNet101_Weights.IMAGENET1K_V1)
 # for i, f in enumerate(features):
 #     print(f"Feature map {i+1} shape: {f.shape}")
 class MambaPyramid(nn.Module):
-    def __init__(self, pretrained,**kwargs):
+    def __init__(self, pretrained, hoi_levels=None, **kwargs):
         super(MambaPyramid, self).__init__()
         self.encoder = Backbone_VSSM(out_indices=(0, 1, 2, 3), pretrained=pretrained, **kwargs)
-        # self.out_ch = out_ch
-        # self.encoder=ResNetFPN(resnet,dim=[256,512,1024,2048])
-        # self.encoder=ResNetFPN(resnet,dim=[64,128,256,512])
-        # self.encoder = SwinFPN(dim=[256,512,1024,2048])
-        
+
         _NORMLAYERS = dict(
             ln=nn.LayerNorm,
             ln2d=LayerNorm2d,
             bn=nn.BatchNorm2d,
         )
-        
+
         _ACTLAYERS = dict(
-            silu=nn.SiLU, 
-            gelu=nn.GELU, 
-            relu=nn.ReLU, 
+            silu=nn.SiLU,
+            gelu=nn.GELU,
+            relu=nn.ReLU,
             sigmoid=nn.Sigmoid,
         )
- 
+
         self.depth = kwargs['decoder_depths']
-        norm_layer: nn.Module = _NORMLAYERS.get(kwargs['norm_layer'].lower(), None)        
+        norm_layer: nn.Module = _NORMLAYERS.get(kwargs['norm_layer'].lower(), None)
         ssm_act_layer: nn.Module = _ACTLAYERS.get(kwargs['ssm_act_layer'].lower(), None)
         mlp_act_layer: nn.Module = _ACTLAYERS.get(kwargs['mlp_act_layer'].lower(), None)
 
-        # Remove the explicitly passed args from kwargs to avoid "got multiple values" error
+        # hoi_levels: 长度为 4 的 list，对应 encoder 输出的 4 个分辨率层级（索引 0~3，分辨率从大到小）。
+        #   1 = 使用 HOI_Fusion_Adapter（高阶交互融合）
+        #   0 = 使用 Bypass_Fusion_Adapter（简单拼接融合，不做 HOI）
+        # 默认值 [1, 1, 1, 1] 表示所有层级全部启用 HOI（原始行为）。
+        if hoi_levels is None:
+            hoi_levels = [1, 1, 1, 1]
+        assert len(hoi_levels) == 4, f"hoi_levels must have 4 elements, got {len(hoi_levels)}"
+        self.hoi_levels = hoi_levels
+
         clean_kwargs = {k: v for k, v in kwargs.items() if k not in ['norm_layer', 'ssm_act_layer', 'mlp_act_layer']}
         self.decoder = Mamba_Decoder_Pyramid(
             encoder_dims=self.encoder.dims,
@@ -212,39 +224,36 @@ class MambaPyramid(nn.Module):
             **clean_kwargs
         )
 
-        self.fusion_adapters = nn.ModuleList(
-            [HOI_Fusion_Adapter(in_channels=dim, out_channels=2 * dim) for dim in self.encoder.dims]
-        )
+        self.fusion_adapters = nn.ModuleList([])
+        for i, dim in enumerate(self.encoder.dims):
+            if hoi_levels[i] == 1:
+                self.fusion_adapters.append(HOI_Fusion_Adapter(in_channels=dim, out_channels=2 * dim))
+            else:
+                self.fusion_adapters.append(Bypass_Fusion_Adapter(in_channels=dim, out_channels=2 * dim))
 
         self.main_clf = nn.Conv2d(in_channels=128*2, out_channels=2, kernel_size=1)
         self.ds = nn.ModuleList([])
         for i in range(self.depth-1):
             self.ds.append(nn.Conv2d(in_channels=128*2, out_channels=2, kernel_size=1))
-        # self.ds1 = nn.Conv2d(in_channels=128*2, out_channels=2, kernel_size=1)
-        # self.ds2 = nn.Conv2d(in_channels=128*2, out_channels=2, kernel_size=1)
-        # self.ds3 = nn.Conv2d(in_channels=128*2, out_channels=2, kernel_size=1)
+
     def _upsample_add(self, x, y):
         _, _, H, W = y.size()
         return F.interpolate(x, size=(H, W), mode='bilinear') + y
-    
+
     def forward(self, pre_data, post_data):
-        # Encoder processing
         pre_features = self.encoder(pre_data)
         post_features = self.encoder(post_data)
         feature = []
         for index in range(len(pre_features)):
             feature.append(self.fusion_adapters[index](pre_features[index], post_features[index]))
-        output,output_ds = self.decoder(feature)
+        output, output_ds = self.decoder(feature)
         output = self.main_clf(output)
         for i in range(self.depth-1):
             output_ds[i] = self.ds[i](output_ds[i])
-        # output_ds[0] = self.ds1(output_ds[0])
-        # output_ds[1] = self.ds2(output_ds[1])
-        # output_ds[2] = self.ds3(output_ds[2])
-      
-        output = F.interpolate(output, size=pre_data.size()[-2:], mode='bilinear',align_corners=False)
+
+        output = F.interpolate(output, size=pre_data.size()[-2:], mode='bilinear', align_corners=False)
         for f in range(len(output_ds)):
-            output_ds[f] = F.interpolate(output_ds[f], size=pre_data.size()[-2:], mode='bilinear',align_corners=False) 
-        return output,output_ds
+            output_ds[f] = F.interpolate(output_ds[f], size=pre_data.size()[-2:], mode='bilinear', align_corners=False)
+        return output, output_ds
     
 
