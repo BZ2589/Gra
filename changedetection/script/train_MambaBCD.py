@@ -277,7 +277,7 @@ def main():
     # 实验 2:            0 0 1 1
     # 实验 3:            0 1 1 1
     # 实验 4 (full HOI): 1 1 1 1  — 全部启用 HOI
-    HOI_CONFIG = [0, 0, 1, 1]  # <--- 修改这里！
+    HOI_CONFIG = [0, 1, 1, 1]  # <--- 修改这里！
     # ============================================================
 
     parser = argparse.ArgumentParser(description="Training on SYSU/LEVIR-CD/WHU-CD/DSIFN-CD dataset")
