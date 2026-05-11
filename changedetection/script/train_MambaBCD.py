@@ -99,10 +99,30 @@ class Trainer(object):
             state_dict.update(model_dict)
             self.deep_model.load_state_dict(state_dict)
 
-        self.optim = optim.AdamW(self.deep_model.parameters(),
-                                 lr=args.learning_rate,
-                                 weight_decay=args.weight_decay,
-                                 fused=True)
+        # ==========================================
+        # 新增：分层学习率 (Layer-wise Learning Rate)
+        # ==========================================
+        hoi_params = []
+        base_params = []
+
+        # 遍历网络中所有的参数
+        for name, param in self.deep_model.named_parameters():
+            if "fusion_adapters" in name:
+                # 只要参数名字里带有 fusion_adapters（也就是你的高阶交互模块）
+                hoi_params.append(param)
+            else:
+                # 其余的骨干网络 (VMamba Encoder)、Decoder、分类头等
+                base_params.append(param)
+
+        # 打印一下参数分组情况（可选，用来在终端确认分配对了）
+        print(f"✅ 分层学习率已开启: Base 参数 {len(base_params)} 个 (lr=1e-4), HOI 参数 {len(hoi_params)} 个 (lr=1e-5)")
+
+        # 将分组参数传入优化器
+        self.optim = optim.AdamW([
+            {'params': base_params, 'lr': 1e-4},  # 皮实的骨干网络用 1e-4 大步流星
+            {'params': hoi_params, 'lr': 1e-5}    # 脆弱的高阶模块用 1e-5 谨慎微调
+        ], weight_decay=args.weight_decay, fused=True)
+        # ==========================================
         self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
                         self.optim,               # 优化器
                         T_max=len(self.train_data_loader),             # 学习率下限
