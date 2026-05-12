@@ -34,6 +34,10 @@ class Trainer(object):
         self.train_data_loader = make_data_loader(args)
 
         print(f"训练批次总数(T_max) = {len(self.train_data_loader)}")
+        
+        # 初始化验证集loader
+        val_dataset = ChangeDetectionDatset(args.dataset, args.test_dataset_path, args.test_data_name_list, 256, None, 'test')
+        self.val_data_loader = DataLoader(val_dataset, batch_size=1, num_workers=8, pin_memory=True, drop_last=False)
 
         self.evaluator = Evaluator(num_class=2)
         log_suffix = args.train_name if args.train_name else str(time.time())
@@ -240,11 +244,9 @@ class Trainer(object):
     def validation(self,iter):
         print('---------starting evaluation-----------')
         self.evaluator.reset()
-        dataset = ChangeDetectionDatset(self.args.dataset,self.args.test_dataset_path, self.args.test_data_name_list, 256, None, 'test')
-        val_data_loader = DataLoader(dataset, batch_size=1, num_workers=4, drop_last=False)
         torch.cuda.empty_cache()
         with torch.no_grad():
-            for itera, data in enumerate(val_data_loader):
+            for itera, data in enumerate(self.val_data_loader):
                 pre_change_imgs, post_change_imgs, labels, name = data             
                 pre_change_imgs = pre_change_imgs.cuda().float()
                 post_change_imgs = post_change_imgs.cuda().float()

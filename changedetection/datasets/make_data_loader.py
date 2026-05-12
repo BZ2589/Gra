@@ -179,13 +179,13 @@ def make_data_loader(args, **kwargs):  # **kwargs could be omitted
     if 'SYSU' in args.dataset or 'LEVIR-CD+' in args.dataset or 'WHU-CD' in args.dataset or 'LEVIR-CD' in args.dataset or 'DSIFN-CD' in args.dataset or 'SYSU' in args.dataset:
         dataset = ChangeDetectionDatset(args.dataset,args.train_dataset_path, args.train_data_name_list, args.crop_size, args.max_iters, args.type)
         # train_sampler = DistributedSampler(dataset, shuffle=True)
-        data_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=args.shuffle, **kwargs, num_workers=16,
+        data_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=args.shuffle, **kwargs, num_workers=8, pin_memory=True,
                                  drop_last=False)
         return data_loader
     if 'SECOND' in args.dataset:
         dataset = SemanticChangeDetectionDatset(args.dataset,args.train_dataset_path, args.train_data_name_list, args.crop_size, args.max_iters, args.type)
         # train_sampler = DistributedSampler(dataset, shuffle=True)
-        data_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=args.shuffle, **kwargs, num_workers=16,
+        data_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=args.shuffle, **kwargs, num_workers=8, pin_memory=True,
                                  drop_last=False)
         return data_loader
     else:
