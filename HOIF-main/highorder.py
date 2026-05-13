@@ -325,10 +325,16 @@ class spatialInteraction(nn.Module):
         infraredReflash3 = self.reflashInfrared3(infraredReflash2)
         
         fused_fourOrderSpa = fused_threeOrderSpa * infraredReflash3
-        fused = self.convf(torch.cat([fused_OneOrderSpa,fused_twoOrderSpa,fused_threeOrderSpa,fused_fourOrderSpa],dim=1))
-        fused = self.norm_out(fused) + vis
 
-        return fused, infraredReflash3
+        # --- 修改部分：对称化空间输出 ---
+        fused_feat = self.convf(torch.cat([fused_OneOrderSpa,fused_twoOrderSpa,fused_threeOrderSpa,fused_fourOrderSpa],dim=1))
+        fused_feat = self.norm_out(fused_feat) # 泄压阀镇压
+        
+        vis_out = fused_feat + vis  # T1 吸收高阶特征
+        inf_out = fused_feat + inf  # T2 对称吸收高阶特征 [NEW]
+        # ----------------------------
+
+        return vis_out, inf_out
 
 
 class OminiInteraction(nn.Module):
@@ -472,7 +478,7 @@ class channelInteraction(nn.Module):
         vis_cat = torch.cat([vis, inf], 1)
 
         chanAtten = self.chaAtten(self.avgpool(vis_cat)).softmax(1)
-        channel_response = self.chaAtten(self.avgpool(vis_cat))
+        # channel_response = self.chaAtten(self.avgpool(vis_cat))
         fused_OneOrderCha = vis_cat * chanAtten
 
         fused_OneOrderCha = self.reflashFused1(fused_OneOrderCha)
@@ -487,13 +493,17 @@ class channelInteraction(nn.Module):
         chanAttenReflash3 = self.reflashChaAtten3(chanAttenReflash2).softmax(1)
         
         fused_fourOrderCha = fused_threeOrderCha * chanAttenReflash3
+
+        # --- 修改部分：对称化通道输出 ---
         fused_fourOrderCha = self.postprocess(fused_fourOrderCha)
-        fused_fourOrderCha = self.norm_out(fused_fourOrderCha)
+        fused_res = self.norm_out(fused_fourOrderCha) # 泄压阀镇压
+        
+        vis_out = fused_res + vis # T1 吸收高阶特征
+        inf_out = fused_res + inf # T2 对称吸收高阶特征 [NEW]
+        # ----------------------------
 
-        fused = fused_fourOrderCha + vis
+        return vis_out, inf_out
 
-        return fused, inf
-    
 
 class highOrderInteraction(nn.Module):
     def __init__(self, channelin, channelout):
