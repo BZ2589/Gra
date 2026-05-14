@@ -27,13 +27,16 @@ def safe_cross_entropy(logits, labels, ignore_index=255):
         return logits.sum() * 0.0
     return F.cross_entropy(logits, labels, ignore_index=ignore_index)
 class Trainer(object):
-    def __init__(self, args):
+    def __init__(self, args, hoi_order=4, hoi_layers=1):
         self.args = args
         config = get_config(args)
 
         self.train_data_loader = make_data_loader(args)
 
         print(f"训练批次总数(T_max) = {len(self.train_data_loader)}")
+        print(f"HOI_CONFIG (levels) = {args.hoi_levels}")
+        print(f"HOI_ORDER (阶数)    = {hoi_order}")
+        print(f"HOI_LAYERS (堆叠)   = {hoi_layers}")
         
         # 初始化验证集loader
         val_dataset = ChangeDetectionDatset(args.dataset, args.test_dataset_path, args.test_data_name_list, 256, None, 'test')
@@ -45,6 +48,8 @@ class Trainer(object):
         self.deep_model = MambaPyramid(
             pretrained=args.pretrained_weight_path,
             hoi_levels=args.hoi_levels,
+            hoi_order=hoi_order,
+            hoi_layers=hoi_layers,
             patch_size=config.MODEL.VSSM.PATCH_SIZE,
             in_chans=config.MODEL.VSSM.IN_CHANS,
             num_classes=config.MODEL.NUM_CLASSES,
@@ -290,7 +295,8 @@ class Trainer(object):
 def main():
     # ============================================================
     # 消融实验配置区：直接修改这里的数字即可切换实验
-    # 4 个数字从左到右对应 Encoder 输出的 4 个分辨率层级（从大到小）
+    #
+    # --- HOI 启用开关（4 个数字对应 Encoder 输出的 4 个分辨率层级，从大到小）---
     #   1 = 使用 HOI_Fusion_Adapter（高阶交互融合）
     #   0 = 使用 Bypass_Fusion_Adapter（简单拼接融合）
     #
@@ -300,6 +306,12 @@ def main():
     # 实验 3:            0 1 1 1
     # 实验 4 (full HOI): 1 1 1 1  — 全部启用 HOI
     HOI_CONFIG = [1, 1, 1, 1]  # <--- 修改这里！
+
+    # --- HOI 交互阶数（1~6，默认 4）---
+    HOI_ORDER = 1  # <--- 修改这里！
+
+    # --- HOI 堆叠层数（默认 1）---
+    HOI_LAYERS = 1  # <--- 修改这里！
     # ============================================================
 
     parser = argparse.ArgumentParser(description="Training on SYSU/LEVIR-CD/WHU-CD/DSIFN-CD dataset")
@@ -335,7 +347,7 @@ def main():
                         help='HOI enable flags for 4 encoder levels (resolution high->low). '
                              '1=use HOI_Fusion_Adapter, 0=use Bypass_Fusion_Adapter. '
                              'If not provided, uses the hardcoded HOI_CONFIG at the top of main(). '
-                             'Example: --hoi_levels 0 0 0 1')
+                              'Example: --hoi_levels 0 0 0 1')
 
     parser.add_argument('--resume', type=str)
     parser.add_argument('--learning_rate', type=float, default=1e-5)
@@ -365,7 +377,7 @@ def main():
         with open('/home/majiancong/WHU-CD/list/train.txt','r') as f_test:
             args.train_data_name_list = f_test.read().split('\n')[:-1]
 
-    trainer = Trainer(args)
+    trainer = Trainer(args, hoi_order=HOI_ORDER, hoi_layers=HOI_LAYERS)
     trainer.training()
 
 

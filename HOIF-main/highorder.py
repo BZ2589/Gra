@@ -239,60 +239,51 @@ class LayerNorm(nn.Module):
 
 
 class spatialInteraction(nn.Module):
-    def __init__(self, channelin, channelout):
+    def __init__(self, channelin, channelout, order=4):
         super(spatialInteraction, self).__init__()
-        self.reflashFused1 = nn.Sequential(
-                            nn.Conv2d(channelin, channelout, 3, 1, 1),
-                            nn.ReLU(),
-                            nn.Conv2d(channelout, channelout, 3, 1, 1)
-                        )
-        self.reflashFused2 = nn.Sequential(
-                            nn.Conv2d(channelin, channelout, 3, 1, 1),
-                            nn.ReLU(),
-                            nn.Conv2d(channelout, channelout, 3, 1, 1)
-                        )
-        self.reflashFused3 = nn.Sequential(
-                            nn.Conv2d(channelin, channelout, 3, 1, 1),
-                            nn.ReLU(),
-                            nn.Conv2d(channelout, channelout, 3, 1, 1)
-                        )
-        self.reflashInfrared1 = nn.Sequential(
-                            nn.Conv2d(channelin, channelout, 3, 1, 1),
-                            nn.ReLU(),
-                            nn.Conv2d(channelout, channelout, 3, 1, 1)
-                        )
-        self.reflashInfrared2 = nn.Sequential(
-                            nn.Conv2d(channelin, channelout, 3, 1, 1),
-                            nn.ReLU(),
-                            nn.Conv2d(channelout, channelout, 3, 1, 1)
-                        )
-        self.reflashInfrared3 = nn.Sequential(
-                            nn.Conv2d(channelin, channelout, 3, 1, 1),
-                            nn.ReLU(),
-                            nn.Conv2d(channelout, channelout, 3, 1, 1)
-                        )
+        self.order = order
 
-        self.conv1 = nn.Sequential(
-                            nn.Conv2d(2*channelout, channelout, 1),
-                            nn.ReLU()
-        )
-        self.conv2 = nn.Sequential(
-            nn.Conv2d(2 * channelout, channelout, 1),
-            nn.ReLU()
-        )
-        self.conv3 = nn.Sequential(
-            nn.Conv2d(2 * channelout, channelout, 1),
-            nn.ReLU()
-        )
+        # 用于演化 fused 特征的层（order-1 组，对应第 2~N 阶）
+        self.reflashFused = nn.ModuleList([
+            nn.Sequential(
+                nn.Conv2d(channelin, channelout, 3, 1, 1),
+                nn.ReLU(),
+                nn.Conv2d(channelout, channelout, 3, 1, 1)
+            ) for _ in range(order - 1)
+        ])
+
+        # 用于演化 infrared 特征的层（order-1 组，每一阶都需要重新提取 inf 特征）
+        self.reflashInfrared = nn.ModuleList([
+            nn.Sequential(
+                nn.Conv2d(channelin, channelout, 3, 1, 1),
+                nn.ReLU(),
+                nn.Conv2d(channelout, channelout, 3, 1, 1)
+            ) for _ in range(order - 1)
+        ])
+
+        # 残差融合层：将前序 fused 特征与当前 fused 特征拼接后融合（order-1 组）
+        self.conv_fuse = nn.ModuleList([
+            nn.Sequential(
+                nn.Conv2d(2 * channelout, channelout, 1),
+                nn.ReLU()
+            ) for _ in range(order - 1)
+        ])
+
+        # 最终融合层：将所有 order 个阶的特征拼接后映射回 channelout
         self.convf = nn.Sequential(
-            nn.Conv2d(4 * channelout, channelout, 1)
+            nn.Conv2d(order * channelout, channelout, 1)
         )
 
-        self.norm1 = LayerNorm(channelout, LayerNorm_type='WithBias')
-        self.norm2 = LayerNorm(channelout, LayerNorm_type='WithBias')
-        self.norm3 = LayerNorm(channelout, LayerNorm_type='WithBias')
-        self.norm4 = LayerNorm(channelout, LayerNorm_type='WithBias')
+        # 频谱注意力归一化（第 1 阶的 atten 归一化）
+        self.norm_atten = LayerNorm(channelout, LayerNorm_type='WithBias')
 
+        # 每阶 fused 特征归一化（order-1 组，对应第 2~N 阶）
+        self.norm_fused = nn.ModuleList([
+            LayerNorm(channelout, LayerNorm_type='WithBias')
+            for _ in range(order - 1)
+        ])
+
+        # 泄压阀：镇压高阶连乘导致的方差爆炸
         self.norm_out = nn.GroupNorm(1, channelout)
         nn.init.constant_(self.norm_out.weight, 0.01)
         nn.init.constant_(self.norm_out.bias, 0)
@@ -302,37 +293,51 @@ class spatialInteraction(nn.Module):
 
         _, C, H, W = vis.size()
 
+        # 第 1 阶：频谱注意力初始化
         vis_fft = torch.fft.rfft2(vis.float())
         inf_fft = torch.fft.rfft2(inf.float())
-
         atten = vis_fft * inf_fft
         atten = torch.fft.irfft2(atten, s=(H, W))
-        atten = self.norm1(atten)
-        fused_OneOrderSpa = atten * inf
+        atten = self.norm_atten(atten)
+        fused = atten * inf
 
-        fused_OneOrderSpa = self.reflashFused1(fused_OneOrderSpa + vis)
-        fused_OneOrderSpa = self.norm2(fused_OneOrderSpa + self.conv1(torch.cat([atten, fused_OneOrderSpa],dim=1)))
-        infraredReflash1 = self.reflashInfrared1(inf)
-        fused_twoOrderSpa = fused_OneOrderSpa * infraredReflash1
-        
-        fused_twoOrderSpa = self.reflashFused2(fused_twoOrderSpa + vis)
-        fused_twoOrderSpa = self.norm3(fused_twoOrderSpa + self.conv2(torch.cat([fused_OneOrderSpa, fused_twoOrderSpa],dim=1)))
-        infraredReflash2 = self.reflashInfrared2(infraredReflash1)
-        fused_threeOrderSpa = fused_twoOrderSpa * infraredReflash2
+        # 收集所有阶的 fused 特征，用于最终融合
+        order_features = [fused]
 
-        fused_threeOrderSpa = self.reflashFused3(fused_threeOrderSpa + vis)
-        fused_threeOrderSpa = self.norm4(fused_threeOrderSpa + self.conv3(torch.cat([fused_twoOrderSpa, fused_threeOrderSpa],dim=1)))
-        infraredReflash3 = self.reflashInfrared3(infraredReflash2)
-        
-        fused_fourOrderSpa = fused_threeOrderSpa * infraredReflash3
+        # 第 2~N 阶：循环演化
+        infrared_reflash = None
+        for k in range(self.order - 1):
+            # 使用第 k 组层（索引 k 对应第 k+2 阶）
+            reflash_fused = self.reflashFused[k]
+            reflash_ir = self.reflashInfrared[k]
+            conv_fuse = self.conv_fuse[k]
+            norm_fused = self.norm_fused[k]
 
-        # --- 修改部分：对称化空间输出 ---
-        fused_feat = self.convf(torch.cat([fused_OneOrderSpa,fused_twoOrderSpa,fused_threeOrderSpa,fused_fourOrderSpa],dim=1))
-        fused_feat = self.norm_out(fused_feat) # 泄压阀镇压
-        
-        vis_out = fused_feat + vis  # T1 吸收高阶特征
-        inf_out = fused_feat + inf  # T2 对称吸收高阶特征 [NEW]
-        # ----------------------------
+            if k == 0:
+                # 第 2 阶：输入是第 1 阶结果 + 原始 vis/inf
+                fused = reflash_fused(fused + vis)
+                fused = norm_fused(fused + conv_fuse(torch.cat([atten, fused], dim=1)))
+                infrared_reflash = reflash_ir(inf)
+            else:
+                # 第 3+ 阶：输入是上一阶结果 + 原始 vis，用前序 fused 做残差
+                prev_fused = order_features[-1]
+                fused = reflash_fused(fused + vis)
+                fused = norm_fused(fused + conv_fuse(torch.cat([prev_fused, fused], dim=1)))
+                infrared_reflash = reflash_ir(infrared_reflash)
+
+            # 与演化后的 infrared 特征相乘，升阶
+            fused = fused * infrared_reflash
+            order_features.append(fused)
+
+        # 融合所有阶的特征
+        fused_feat = self.convf(torch.cat(order_features, dim=1))
+
+        # 泄压阀镇压方差
+        fused_feat = self.norm_out(fused_feat)
+
+        # 对称输出：T1 和 T2 各自吸收相同的高阶特征
+        vis_out = fused_feat + vis
+        inf_out = fused_feat + inf
 
         return vis_out, inf_out
 
@@ -433,41 +438,45 @@ class OminiInteraction(nn.Module):
     
 
 class channelInteraction(nn.Module):
-    def __init__(self, channelin, channelout):
+    def __init__(self, channelin, channelout, order=4):
         super(channelInteraction, self).__init__()
-        self.chaAtten = nn.Sequential(nn.Conv2d(channelin * 2, channelout, kernel_size=1, padding=0, bias=True),
-                                    nn.ReLU(),
-                                    nn.Conv2d(channelout, channelin * 2, kernel_size=1, padding=0, bias=True))
-        self.reflashChaAtten1 = nn.Sequential(nn.Conv2d(channelin * 2, channelout, kernel_size=1, padding=0, bias=True),
-                                    nn.ReLU(),
-                                    nn.Conv2d(channelout, channelin * 2, kernel_size=1, padding=0, bias=True))
-        self.reflashChaAtten2 = nn.Sequential(nn.Conv2d(channelin * 2, channelout, kernel_size=1, padding=0, bias=True),
-                                    nn.ReLU(),
-                                    nn.Conv2d(channelout, channelin * 2, kernel_size=1, padding=0, bias=True))
-        self.reflashChaAtten3 = nn.Sequential(nn.Conv2d(channelin * 2, channelout, kernel_size=1, padding=0, bias=True),
-                                    nn.ReLU(),
-                                    nn.Conv2d(channelout, channelin * 2, kernel_size=1, padding=0, bias=True))
-        
-        self.reflashFused1 = nn.Sequential(
-                            nn.Conv2d(channelin * 2, channelout * 2, 3, 1, 1),
-                            nn.ReLU(),
-                            nn.Conv2d(channelout * 2, channelout * 2, 3, 1, 1)
-                        )
-        self.reflashFused2 = nn.Sequential(
-                            nn.Conv2d(channelin * 2, channelout * 2, 3, 1, 1),
-                            nn.ReLU(),
-                            nn.Conv2d(channelout * 2, channelout * 2, 3, 1, 1)
-                        )
-        self.reflashFused3 = nn.Sequential(
-                            nn.Conv2d(channelin * 2, channelout * 2, 3, 1, 1),
-                            nn.ReLU(),
-                            nn.Conv2d(channelout * 2, channelout * 2, 3, 1, 1)
-                        )
-        self.avgpool = nn.AdaptiveAvgPool2d(1)
-        
-        self.postprocess = nn.Sequential(InvBlock(DenseBlock, 2 * channelin, channelout),
-                                         nn.Conv2d(2*channelout, channelout, 1, 1, 0))
+        self.order = order
+        cat_channels = channelin * 2  # 双时相拼接后的通道数
 
+        # 初始通道注意力生成器
+        self.chaAtten = nn.Sequential(
+            nn.Conv2d(cat_channels, channelout, kernel_size=1, padding=0, bias=True),
+            nn.ReLU(),
+            nn.Conv2d(channelout, cat_channels, kernel_size=1, padding=0, bias=True)
+        )
+
+        # 通道注意力演化层（order-1 组，每阶对注意力做进一步精炼）
+        self.reflashChaAtten = nn.ModuleList([
+            nn.Sequential(
+                nn.Conv2d(cat_channels, channelout, kernel_size=1, padding=0, bias=True),
+                nn.ReLU(),
+                nn.Conv2d(channelout, cat_channels, kernel_size=1, padding=0, bias=True)
+            ) for _ in range(order - 1)
+        ])
+
+        # 融合特征演化层（order-1 组，每阶对 fused 特征做空间精炼）
+        self.reflashFused = nn.ModuleList([
+            nn.Sequential(
+                nn.Conv2d(cat_channels, channelout * 2, 3, 1, 1),
+                nn.ReLU(),
+                nn.Conv2d(channelout * 2, channelout * 2, 3, 1, 1)
+            ) for _ in range(order - 1)
+        ])
+
+        self.avgpool = nn.AdaptiveAvgPool2d(1)
+
+        # 后处理：将最终 fused 特征映射回 channelout
+        self.postprocess = nn.Sequential(
+            InvBlock(DenseBlock, cat_channels, channelout),
+            nn.Conv2d(2 * channelout, channelout, 1, 1, 0)
+        )
+
+        # 泄压阀：镇压高阶连乘导致的方差爆炸
         self.norm_out = nn.GroupNorm(1, channelout)
         nn.init.constant_(self.norm_out.weight, 0.01)
         nn.init.constant_(self.norm_out.bias, 0)
@@ -477,39 +486,40 @@ class channelInteraction(nn.Module):
 
         vis_cat = torch.cat([vis, inf], 1)
 
+        # 第 1 阶：初始通道注意力
         chanAtten = self.chaAtten(self.avgpool(vis_cat)).softmax(1)
-        # channel_response = self.chaAtten(self.avgpool(vis_cat))
-        fused_OneOrderCha = vis_cat * chanAtten
+        fused = vis_cat * chanAtten
 
-        fused_OneOrderCha = self.reflashFused1(fused_OneOrderCha)
-        chanAttenReflash1 = self.reflashChaAtten1(chanAtten).softmax(1)
-        fused_twoOrderCha = fused_OneOrderCha * chanAttenReflash1
+        # 第 2~N 阶：循环演化通道注意力并升阶
+        for k in range(self.order - 1):
+            reflash_cha = self.reflashChaAtten[k]
+            reflash_fused = self.reflashFused[k]
 
-        fused_twoOrderCha = self.reflashFused2(fused_twoOrderCha)
-        chanAttenReflash2 = self.reflashChaAtten2(chanAttenReflash1).softmax(1)
-        fused_threeOrderCha = fused_twoOrderCha * chanAttenReflash2
+            # 精炼通道注意力
+            chanAtten = reflash_cha(chanAtten).softmax(1)
 
-        fused_threeOrderCha = self.reflashFused3(fused_threeOrderCha)
-        chanAttenReflash3 = self.reflashChaAtten3(chanAttenReflash2).softmax(1)
-        
-        fused_fourOrderCha = fused_threeOrderCha * chanAttenReflash3
+            # 精炼融合特征
+            fused = reflash_fused(fused)
 
-        # --- 修改部分：对称化通道输出 ---
-        fused_fourOrderCha = self.postprocess(fused_fourOrderCha)
-        fused_res = self.norm_out(fused_fourOrderCha) # 泄压阀镇压
-        
-        vis_out = fused_res + vis # T1 吸收高阶特征
-        inf_out = fused_res + inf # T2 对称吸收高阶特征 [NEW]
-        # ----------------------------
+            # 与精炼后的注意力相乘，升阶
+            fused = fused * chanAtten
+
+        # 后处理 + 泄压阀
+        fused = self.postprocess(fused)
+        fused_res = self.norm_out(fused)
+
+        # 对称输出：T1 和 T2 各自吸收相同的高阶特征
+        vis_out = fused_res + vis
+        inf_out = fused_res + inf
 
         return vis_out, inf_out
 
 
 class highOrderInteraction(nn.Module):
-    def __init__(self, channelin, channelout):
+    def __init__(self, channelin, channelout, order=4):
         super(highOrderInteraction, self).__init__()
-        self.spatial = spatialInteraction(channelin, channelout)
-        self.channel = channelInteraction(channelin, channelout)
+        self.spatial = spatialInteraction(channelin, channelout, order=order)
+        self.channel = channelInteraction(channelin, channelout, order=order)
 
     def forward(self, vis_y, inf, i, j):
 

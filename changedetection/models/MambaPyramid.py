@@ -65,10 +65,16 @@ def _load_hoi_interaction_class():
 
 
 class HOI_Fusion_Adapter(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, order=4, layers=1):
         super().__init__()
+        self.layers = layers
+
+        # 创建 layers 个 HOI 模块，首尾相接堆叠
         high_order_interaction = _load_hoi_interaction_class()
-        self.hoi = high_order_interaction(channelin=in_channels, channelout=in_channels)
+        self.hoi_blocks = nn.ModuleList([
+            high_order_interaction(channelin=in_channels, channelout=in_channels, order=order)
+            for _ in range(layers)
+        ])
 
         self.pre_norm_t1 = nn.GroupNorm(1, in_channels, eps=1e-6, affine=True)
         self.pre_norm_t2 = nn.GroupNorm(1, in_channels, eps=1e-6, affine=True)
@@ -88,7 +94,10 @@ class HOI_Fusion_Adapter(nn.Module):
             feat_T1 = F.normalize(feat_T1, p=2.0, dim=1, eps=1e-6)
             feat_T2 = F.normalize(feat_T2, p=2.0, dim=1, eps=1e-6)
 
-            feat_t1_fused, feat_t2_evolved = self.hoi(feat_T1, feat_T2, 0, 1)
+            # 顺序堆叠：上一个 HOI 模块的输出作为下一个的输入
+            feat_t1_fused, feat_t2_evolved = feat_T1, feat_T2
+            for block in self.hoi_blocks:
+                feat_t1_fused, feat_t2_evolved = block(feat_t1_fused, feat_t2_evolved, 0, 1)
 
             hoi_feat = torch.cat([feat_t1_fused, feat_t2_evolved], dim=1)
 
@@ -182,8 +191,10 @@ resnet = models.resnet101(weights=models.ResNet101_Weights.IMAGENET1K_V1)
 # for i, f in enumerate(features):
 #     print(f"Feature map {i+1} shape: {f.shape}")
 class MambaPyramid(nn.Module):
-    def __init__(self, pretrained, hoi_levels=None, **kwargs):
+    def __init__(self, pretrained, hoi_levels=None, hoi_order=4, hoi_layers=1, **kwargs):
         super(MambaPyramid, self).__init__()
+        self.hoi_order = hoi_order
+        self.hoi_layers = hoi_layers
         self.encoder = Backbone_VSSM(out_indices=(0, 1, 2, 3), pretrained=pretrained, **kwargs)
 
         _NORMLAYERS = dict(
@@ -227,7 +238,7 @@ class MambaPyramid(nn.Module):
         self.fusion_adapters = nn.ModuleList([])
         for i, dim in enumerate(self.encoder.dims):
             if hoi_levels[i] == 1:
-                self.fusion_adapters.append(HOI_Fusion_Adapter(in_channels=dim, out_channels=2 * dim))
+                self.fusion_adapters.append(HOI_Fusion_Adapter(in_channels=dim, out_channels=2 * dim, order=hoi_order, layers=hoi_layers))
             else:
                 self.fusion_adapters.append(Bypass_Fusion_Adapter(in_channels=dim, out_channels=2 * dim))
 
