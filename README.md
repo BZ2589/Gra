@@ -35,7 +35,7 @@ bash changedetection/script/run/train_levircd.sh levircd_base002 1
 **启动之前记得修改脚本内训练名称**
 ```bash
 nohup bash watch_gpu.sh NAME > sniper_dual.log 2>&1 &
-# 上面的NAME可替换成
+# 上面的NAME可替换成levircd_NAME
 tail -f sniper_dual.log
 # 查看监控程序日志
 ```
