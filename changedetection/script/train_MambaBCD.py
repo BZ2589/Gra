@@ -308,10 +308,10 @@ def main():
     HOI_CONFIG = [1, 1, 1, 1]  # <--- 修改这里！
 
     # --- HOI 交互阶数（1~6，默认 4）---
-    HOI_ORDER = 6  # <--- 修改这里！
+    HOI_ORDER = 3  # <--- 修改这里！
 
     # --- HOI 堆叠层数（默认 1）---
-    HOI_LAYERS = 1  # <--- 修改这里！
+    HOI_LAYERS = 2  # <--- 修改这里！
     # ============================================================
 
     parser = argparse.ArgumentParser(description="Training on SYSU/LEVIR-CD/WHU-CD/DSIFN-CD dataset")
