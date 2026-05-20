@@ -311,7 +311,7 @@ def main():
     HOI_ORDER = 3  # <--- 修改这里！
 
     # --- HOI 堆叠层数（默认 1）---
-    HOI_LAYERS = 2  # <--- 修改这里！
+    HOI_LAYERS = 3  # <--- 修改这里！
     # ============================================================
 
     parser = argparse.ArgumentParser(description="Training on SYSU/LEVIR-CD/WHU-CD/DSIFN-CD dataset")
