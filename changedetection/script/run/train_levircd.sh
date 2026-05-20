@@ -2,6 +2,9 @@
 GPU_ID=${2:-0} # Use the second argument as GPU_ID, default to 0 if not provided
 RUN_NAME=${1:-'default_run'} # Use the first argument as RUN_NAME, default to 'default_run' if not provided
 
+# Avoid CUDA fragmentation OOM
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
 CUDA_VISIBLE_DEVICES=$GPU_ID python changedetection/script/train_MambaBCD.py --dataset 'LEVIR-CD' \
                                 --batch_size 8 \
                                 --crop_size 256 \
