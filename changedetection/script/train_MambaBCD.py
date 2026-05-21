@@ -311,7 +311,7 @@ def main():
     HOI_ORDER = 3  # <--- 修改这里！
 
     # --- HOI 堆叠层数（默认 1）---
-    HOI_LAYERS = 3  # <--- 修改这里！
+    HOI_LAYERS = 1  # <--- 修改这里！
     # ============================================================
 
     parser = argparse.ArgumentParser(description="Training on SYSU/LEVIR-CD/WHU-CD/DSIFN-CD dataset")
@@ -325,9 +325,9 @@ def main():
     parser.add_argument('--pretrained_weight_path', type=str, help='path to pretrained weights')
     parser.add_argument('--dataset', type=str, default='SYSU')
     parser.add_argument('--type', type=str, default='train')
-    parser.add_argument('--train_dataset_path', type=str, default='/home/songjian/project/datasets/SYSU/train')
-    # parser.add_argument('--train_data_list_path', type=str, default='/home/songjian/project/datasets/SYSU/train_list.txt')
-    parser.add_argument('--test_dataset_path', type=str, default='/home/songjian/project/datasets/SYSU/test')
+    parser.add_argument('--train_dataset_path', type=str, default='/home/z/dataset/SYSU-CD/train')
+    # parser.add_argument('--train_data_list_path', type=str, default='/home/z/dataset/SYSU-CD/train_list.txt')
+    parser.add_argument('--test_dataset_path', type=str, default='/home/z/dataset/SYSU-CD/test')
     parser.add_argument('--decoder_depths', type=int, default=4)
     # parser.add_argument('--test_data_list_path', type=str, default='/home/songjian/project/datasets/SYSU/test_list.txt')
     parser.add_argument('--shuffle', type=bool, default=True)
@@ -360,22 +360,69 @@ def main():
         args.hoi_levels = HOI_CONFIG
     assert len(args.hoi_levels) == 4, f"hoi_levels must have 4 elements, got {len(args.hoi_levels)}: {args.hoi_levels}"
 
+    def image_name_list_from_dir(dir_path):
+        return sorted([x for x in os.listdir(dir_path) if x.lower().endswith(('.png', '.jpg', '.jpeg', '.tif', '.tiff'))])
+
+    def find_list_file(dataset_path, split):
+        search_dirs = [
+            os.path.join(dataset_path, 'list'),
+            os.path.join(os.path.dirname(dataset_path), 'list'),
+            os.path.abspath(os.path.join(dataset_path, '..', 'list')),
+        ]
+        for d in search_dirs:
+            path = os.path.join(d, f'{split}.txt')
+            if os.path.exists(path):
+                return path
+        return None
+
+    def load_name_list(dataset_path, split):
+        list_file = find_list_file(dataset_path, split)
+        if list_file is None:
+            return None
+        with open(list_file, 'r') as f:
+            return [x.strip() for x in f.read().splitlines() if x.strip()]
+
+    def resolve_split_dir(dataset_path, candidate_names):
+        for name in candidate_names:
+            dir_path = os.path.join(dataset_path, name)
+            if os.path.exists(dir_path):
+                return dir_path
+        raise FileNotFoundError(f'Cannot resolve split directory under {dataset_path} with candidates {candidate_names}')
+
     if args.dataset=='LEVIR-CD' or args.dataset=='LEVIR-CD+':
         args.train_data_name_list = os.listdir(os.path.join(args.train_dataset_path,'A'))
         args.test_data_name_list = os.listdir(os.path.join(args.test_dataset_path,'A'))
     if args.dataset=='SYSU':
-        args.train_data_name_list = os.listdir(os.path.join(args.train_dataset_path,'time1'))
-        args.test_data_name_list = os.listdir(os.path.join(args.test_dataset_path,'time1'))
+        args.train_data_name_list = load_name_list(args.train_dataset_path, 'train')
+        args.test_data_name_list = load_name_list(args.test_dataset_path, 'test')
+        if args.train_data_name_list is None:
+            train_dir = resolve_split_dir(args.train_dataset_path, ['time1', 'A'])
+            args.train_data_name_list = image_name_list_from_dir(train_dir)
+        if args.test_data_name_list is None:
+            test_dir = resolve_split_dir(args.test_dataset_path, ['time1', 'A'])
+            args.test_data_name_list = image_name_list_from_dir(test_dir)
     if args.dataset=='DSIFN-CD':
-        args.train_data_name_list = os.listdir(os.path.join(args.train_dataset_path,'t1'))
-        args.test_data_name_list = os.listdir(os.path.join(args.test_dataset_path,'t1'))
+        args.train_data_name_list = load_name_list(args.train_dataset_path, 'train')
+        args.test_data_name_list = load_name_list(args.test_dataset_path, 'test')
+        if args.train_data_name_list is None:
+            train_dir = resolve_split_dir(args.train_dataset_path, ['t1', 't11', 'A'])
+            args.train_data_name_list = image_name_list_from_dir(train_dir)
+        if args.test_data_name_list is None:
+            test_dir = resolve_split_dir(args.test_dataset_path, ['t1', 't11', 'A'])
+            args.test_data_name_list = image_name_list_from_dir(test_dir)
     if args.dataset == 'WHU-CD':
         args.train_data_name_list = []
         args.test_data_name_list = []
-        with open('/home/majiancong/WHU-CD/list/test.txt','r') as f_test:
-            args.test_data_name_list = f_test.read().split('\n')[:-1]
-        with open('/home/majiancong/WHU-CD/list/train.txt','r') as f_test:
-            args.train_data_name_list = f_test.read().split('\n')[:-1]
+        whu_train_list = find_list_file(args.train_dataset_path, 'train')
+        whu_test_list = find_list_file(args.test_dataset_path, 'test')
+        if whu_train_list is not None and whu_test_list is not None:
+            with open(whu_test_list, 'r') as f_test:
+                args.test_data_name_list = [x.strip() for x in f_test.read().splitlines() if x.strip()]
+            with open(whu_train_list, 'r') as f_train:
+                args.train_data_name_list = [x.strip() for x in f_train.read().splitlines() if x.strip()]
+        else:
+            args.train_data_name_list = image_name_list_from_dir(os.path.join(args.train_dataset_path, 'A'))
+            args.test_data_name_list = image_name_list_from_dir(os.path.join(args.test_dataset_path, 'A'))
 
     trainer = Trainer(args, hoi_order=HOI_ORDER, hoi_layers=HOI_LAYERS)
     trainer.training()

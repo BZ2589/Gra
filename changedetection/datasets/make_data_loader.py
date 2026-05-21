@@ -71,22 +71,25 @@ class ChangeDetectionDatset(Dataset):
             post_path = os.path.join(self.dataset_path,'B', self.data_list[index])
             label_path = os.path.join(self.dataset_path, 'label', self.data_list[index])
         if self.dataset_name=='SYSU':
-            pre_path = os.path.join(self.dataset_path, 'time1', self.data_list[index])
-            post_path = os.path.join(self.dataset_path,'time2', self.data_list[index])
+            pre_prefix = 'time1' if os.path.exists(os.path.join(self.dataset_path, 'time1')) else 'A'
+            post_prefix = 'time2' if os.path.exists(os.path.join(self.dataset_path, 'time2')) else 'B'
+            pre_path = os.path.join(self.dataset_path, pre_prefix, self.data_list[index])
+            post_path = os.path.join(self.dataset_path, post_prefix, self.data_list[index])
             label_path = os.path.join(self.dataset_path, 'label', self.data_list[index])
         if self.dataset_name == 'DSIFN-CD':
-            pre_path = os.path.join(self.dataset_path, 't1', self.data_list[index])
-            post_path = os.path.join(self.dataset_path,'t2', self.data_list[index])
+            pre_prefix = 't1' if os.path.exists(os.path.join(self.dataset_path, 't1')) else 't11' if os.path.exists(os.path.join(self.dataset_path, 't11')) else 'A'
+            post_prefix = 't2' if os.path.exists(os.path.join(self.dataset_path, 't2')) else 't22' if os.path.exists(os.path.join(self.dataset_path, 't22')) else 'B'
+            pre_path = os.path.join(self.dataset_path, pre_prefix, self.data_list[index])
+            post_path = os.path.join(self.dataset_path, post_prefix, self.data_list[index])
             if self.type=='train':
-                label_path = os.path.join(self.dataset_path, 'm/m', self.data_list[index].split('.')[0]+'.png')
+                train_mask_dir = 'm/m' if os.path.exists(os.path.join(self.dataset_path, 'm/m')) else 'm'
+                label_path = os.path.join(self.dataset_path, train_mask_dir, self.data_list[index].split('.')[0]+'.png')
             else:
-                label_path = os.path.join(self.dataset_path, 'mask', self.data_list[index].split('.')[0]+'.tif')
+                test_mask_dir = 'mask' if os.path.exists(os.path.join(self.dataset_path, 'mask')) else 'm'
+                label_path = os.path.join(self.dataset_path, test_mask_dir, self.data_list[index].split('.')[0]+'.tif')
         if self.dataset_name=='WHU-CD':
             pre_path = os.path.join(self.dataset_path, 'A', self.data_list[index])
             post_path = os.path.join(self.dataset_path,'B', self.data_list[index])
-            # if self.type=='train':
-            #     label_path = os.path.join(self.dataset_path, 'label/OUT_0_1', self.data_list[index].split('.')[0]+'.png')
-            # else:
             label_path = os.path.join(self.dataset_path, 'label', self.data_list[index])
         pre_img = self.loader(pre_path)
         post_img = self.loader(post_path)
