@@ -10,8 +10,8 @@ CUDA_VISIBLE_DEVICES=$GPU_ID python changedetection/script/train_MambaBCD.py --d
                                 --max_iters 400000 \
                                 --model_type baseline_base_sysu_baseline-res101-nods \
                                 --model_param_path 'changedetection/saved_models' \
-                                --train_dataset_path '/home/z/dataset/SYSU-CD/train' \
-                                --test_dataset_path '/home/z/dataset/SYSU-CD/test' \
+                                --train_dataset_path '/home/z/dataset/SYSU-CD' \
+                                --test_dataset_path '/home/z/dataset/SYSU-CD' \
                                 --cfg './changedetection/configs/vssm1/vssm_base_224.yaml' \
                                 --decoder_depths 4 \
                                 --pretrained_weight_path './changedetection/pretrained_weight/vssm_base_0229_ckpt_epoch_237.pth' \

@@ -63,6 +63,9 @@ nohup bash watch_gpu.sh <RUN_NAME> <DATASET> [GPU_ID] > sniper_dual.log 2>&1 &
 ```bash
 nohup bash watch_gpu.sh myrun WHU-CD > sniper_dual.log 2>&1 &
 ```
+nohup bash watch_gpu.sh whucd001 WHU-CD > sniper_dual.log 2>&1 &
+
+tail -f sniper_dual.log
 
 如果未指定 `GPU_ID`，脚本会自动扫描显卡并选择空闲显卡。
 
