@@ -88,3 +88,5 @@ __pycache__/
 visual_results/
 
 *.tar.gz
+
+**/资料/

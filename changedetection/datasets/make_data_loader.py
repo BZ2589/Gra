@@ -116,8 +116,9 @@ class ChangeDetectionDatset(Dataset):
             label_path = os.path.join(self.dataset_path, 'label', self.data_list[index])
         pre_img = self.loader(pre_path)
         post_img = self.loader(post_path)
-        label = self.loader(label_path)
-        label = label / 255
+        label = self.loader(label_path).astype(np.float32)
+        if label.max() > 1.5:
+            label = label / 255.0
 
         if 'train'  in self.data_pro_type:
             pre_img, post_img, label = self.__transforms(True, pre_img, post_img, label)
