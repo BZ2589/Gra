@@ -141,11 +141,12 @@ class Trainer(object):
 
     def training(self):
         best_kc = 0.0
-        best_round = []
+        best_iter = 0
+        best_round = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         torch.cuda.empty_cache()
         elem_num = len(self.train_data_loader)
         with open(os.path.join(self.model_save_path,'result.txt'),'w') as output:
-            output.write(f'best round:{best_round}\n best iter: 0')
+            output.write(f'best round:{best_round}\n best iter: {best_iter}')
         
         # Initialize CSV for logging validation metrics
         csv_path = os.path.join(self.model_save_path, 'metrics.csv')
@@ -223,9 +224,9 @@ class Trainer(object):
                     with open(csv_path, 'a', newline='') as f:
                         f.write(f'{itera + 1},{rec},{pre},{oa},{f1_score},{iou},{kc}\n')
                         
-                    if kc > best_kc:
+                    if kc >= best_kc:
                         # 新增逻辑：如果之前已经保存过最优模型，先把旧的删了腾空间
-                        if best_kc > 0.0:  
+                        if best_iter > 0:
                             old_model_path = os.path.join(self.model_save_path, f'{best_iter}_model.pth')
                             if os.path.exists(old_model_path):
                                 os.remove(old_model_path)
