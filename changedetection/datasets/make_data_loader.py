@@ -117,11 +117,7 @@ class ChangeDetectionDatset(Dataset):
         pre_img = self.loader(pre_path)
         post_img = self.loader(post_path)
         label = self.loader(label_path)
-        if self.dataset_name != "DSIFN-CD":
-            label = label / 255
-        else:
-            if self.type == 'train':
-                label = label / 255
+        label = label / 255
 
         if 'train'  in self.data_pro_type:
             pre_img, post_img, label = self.__transforms(True, pre_img, post_img, label)
