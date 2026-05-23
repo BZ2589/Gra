@@ -77,16 +77,20 @@ class ChangeDetectionDatset(Dataset):
             post_path = os.path.join(self.dataset_path, post_prefix, self.data_list[index])
             label_path = os.path.join(self.dataset_path, 'label', self.data_list[index])
         if self.dataset_name == 'DSIFN-CD':
-            pre_prefix = 't1' if os.path.exists(os.path.join(self.dataset_path, 't1')) else 't11' if os.path.exists(os.path.join(self.dataset_path, 't11')) else 'A'
-            post_prefix = 't2' if os.path.exists(os.path.join(self.dataset_path, 't2')) else 't22' if os.path.exists(os.path.join(self.dataset_path, 't22')) else 'B'
+            pre_prefix = 'im1' if os.path.exists(os.path.join(self.dataset_path, 'im1')) else 't1' if os.path.exists(os.path.join(self.dataset_path, 't1')) else 't11' if os.path.exists(os.path.join(self.dataset_path, 't11')) else 'A'
+            post_prefix = 'im2' if os.path.exists(os.path.join(self.dataset_path, 'im2')) else 't2' if os.path.exists(os.path.join(self.dataset_path, 't2')) else 't22' if os.path.exists(os.path.join(self.dataset_path, 't22')) else 'B'
             pre_path = os.path.join(self.dataset_path, pre_prefix, self.data_list[index])
             post_path = os.path.join(self.dataset_path, post_prefix, self.data_list[index])
-            if self.type=='train':
-                train_mask_dir = 'm/m' if os.path.exists(os.path.join(self.dataset_path, 'm/m')) else 'm'
-                label_path = os.path.join(self.dataset_path, train_mask_dir, self.data_list[index].split('.')[0]+'.png')
-            else:
-                test_mask_dir = 'mask' if os.path.exists(os.path.join(self.dataset_path, 'mask')) else 'm'
-                label_path = os.path.join(self.dataset_path, test_mask_dir, self.data_list[index].split('.')[0]+'.tif')
+            label_stem = self.data_list[index].split('.')[0]
+            possible_label_dirs = ['mask', 'mask_128/m', 'mask_128', 'mask_256/m', 'mask_256', 'mask_64/m', 'mask_64', 'mask_32/m', 'mask_32', 'label']
+            label_path = None
+            for label_dir in possible_label_dirs:
+                candidate = os.path.join(self.dataset_path, label_dir, label_stem + '.png')
+                if os.path.exists(candidate):
+                    label_path = candidate
+                    break
+            if label_path is None:
+                raise FileNotFoundError(f'Cannot find DSIFN-CD label for {self.data_list[index]} under {self.dataset_path}')
         if self.dataset_name=='WHU-CD':
             pre_path = os.path.join(self.dataset_path, 'A', self.data_list[index])
             post_path = os.path.join(self.dataset_path,'B', self.data_list[index])
