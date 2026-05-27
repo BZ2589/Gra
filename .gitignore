@@ -89,3 +89,5 @@ test_results.zip
 HOIM-results/
 *.log
 sniper_dual.log
+
+**/temp/

@@ -16,7 +16,7 @@ TRAIN_NAME=$1
 DATASET=$2
 CHECK_INTERVAL=120  # 每 120 秒扫一次
 
-# 根据数据集选择训练脚本和日志名
+# 根据数据集选择训练脚本和日志前缀
 case "$DATASET" in
     LEVIR-CD|LEVIR-CD+)
         SCRIPT="changedetection/script/run/train_levircd.sh"
@@ -56,7 +56,7 @@ while true; do
             echo "[$(date +'%m-%d %H:%M:%S')] 🚀 在 GPU $FREE_GPU_ID 启动训练: $TRAIN_NAME ($DATASET)"
             echo "[$(date +'%m-%d %H:%M:%S')] 📝 日志输出到: $LOG_FILE"
 
-            # 将训练输出重定向到各自的日志文件
+            # 通过环境变量指定 GPU，日志重定向到各自文件
             CUDA_VISIBLE_DEVICES=$FREE_GPU_ID bash "$SCRIPT" "$TRAIN_NAME" > "$LOG_FILE" 2>&1
 
             echo "[$(date +'%m-%d %H:%M:%S')] ✅ 训练 [$TRAIN_NAME] 已完成，日志保存在 $LOG_FILE"

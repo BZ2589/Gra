@@ -1,11 +1,18 @@
-python script/train_MambaBCD.py --dataset 'SYSU' \
+#!/bin/bash
+GPU_ID=${2:-0}
+RUN_NAME=${1:-'default_run'}
+
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+CUDA_VISIBLE_DEVICES=$GPU_ID python changedetection/script/train_MambaBCD.py --dataset 'SYSU' \
                                 --batch_size 8 \
                                 --crop_size 256 \
                                 --max_iters 400000 \
                                 --model_type baseline_base_sysu_baseline-res101-nods \
                                 --model_param_path 'changedetection/saved_models' \
-                                --train_dataset_path '/home/majiancong/data/SYSU/train' \
-                                --test_dataset_path '/home/majiancong/data/SYSU/test' \
-                                --cfg '/home/majiancong/MambaCD/changedetection/configs/vssm1/vssm_base_224.yaml' \
+                                --train_dataset_path '/home/z/dataset/SYSU-CD' \
+                                --test_dataset_path '/home/z/dataset/SYSU-CD' \
+                                --cfg './changedetection/configs/vssm1/vssm_base_224.yaml' \
                                 --decoder_depths 4 \
-                                --pretrained_weight_path '/home/majiancong/MambaCD/changedetection/vssm_base_0229_ckpt_epoch_237.pth'
+                                --pretrained_weight_path './changedetection/pretrained_weight/vssm_base_0229_ckpt_epoch_237.pth' \
+                                --train_name "$RUN_NAME"

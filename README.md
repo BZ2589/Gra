@@ -27,19 +27,10 @@ nohup bash watch_gpu.sh <RUN_NAME> <DATASET> > logs/<RUN_NAME>.log 2>&1 &
 nohup bash watch_gpu.sh levir_exp001 LEVIR-CD > logs/levir_exp001.log 2>&1 &
 
 # SYSU 训练
-nohup bash watch_gpu.sh sysu_exp001 SYSU > logs/sysu_exp001.log 2>&1 &
+nohup bash watch_gpu.sh sysu_base001 SYSU > logs/sysu_base001.log 2>&1 &
 
 # WHU-CD 训练
-nohup bash watch_gpu.sh whu_exp001 WHU-CD > logs/whu_exp001.log 2>&1 &
-```
-
-### 同时训练多个任务
-
-多个任务可以同时运行，脚本会自动分配不同的 GPU：
-
-```bash
-nohup bash watch_gpu.sh exp001 LEVIR-CD > logs/exp001_levir.log 2>&1 &
-nohup bash watch_gpu.sh exp002 SYSU > logs/exp002_sysu.log 2>&1 &
+nohup bash watch_gpu.sh whu_base001 WHU-CD > logs/whu_base001.log 2>&1 &
 ```
 
 ### 日志位置
