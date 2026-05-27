@@ -391,8 +391,18 @@ def main():
         raise FileNotFoundError(f'Cannot resolve split directory under {dataset_path} with candidates {candidate_names}')
 
     if args.dataset=='LEVIR-CD' or args.dataset=='LEVIR-CD+':
-        args.train_data_name_list = os.listdir(os.path.join(args.train_dataset_path,'A'))
-        args.test_data_name_list = os.listdir(os.path.join(args.test_dataset_path,'A'))
+        # 优先从 list 文件读取（适用于 LEVIR-CD256 这种 A/B/label 根目录 + list 划分的结构）
+        levir_train_list = find_list_file(args.train_dataset_path, 'train')
+        levir_test_list = find_list_file(args.test_dataset_path, 'test')
+        if levir_train_list is not None and levir_test_list is not None:
+            with open(levir_train_list, 'r') as f:
+                args.train_data_name_list = [x.strip() for x in f.read().splitlines() if x.strip()]
+            with open(levir_test_list, 'r') as f:
+                args.test_data_name_list = [x.strip() for x in f.read().splitlines() if x.strip()]
+        else:
+            # 兼容 LEVIR-CD-1024 这种 train/test/val 分层结构
+            args.train_data_name_list = os.listdir(os.path.join(args.train_dataset_path,'A'))
+            args.test_data_name_list = os.listdir(os.path.join(args.test_dataset_path,'A'))
     if args.dataset=='SYSU':
         args.train_data_name_list = load_name_list(args.train_dataset_path, 'train')
         args.test_data_name_list = load_name_list(args.test_dataset_path, 'test')

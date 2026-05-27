@@ -36,6 +36,9 @@ while true; do
                 LEVIR-CD|LEVIR-CD+)
                     SCRIPT="changedetection/script/run/train_levircd.sh"
                     ;;
+                LEVIR-CD256)
+                    SCRIPT="changedetection/script/run/train_levircd256.sh"
+                    ;;
                 SYSU|SYSU-CD)
                     SCRIPT="changedetection/script/run/train_sysu.sh"
                     ;;
@@ -46,7 +49,7 @@ while true; do
                     SCRIPT="changedetection/script/run/train_whucd.sh"
                     ;;
                 *)
-                    echo "❌ 错误：不支持的数据集 '$DATASET'。支持 LEVIR-CD、SYSU-CD、DSIFN-CD、WHU-CD。"
+                    echo "❌ 错误：不支持的数据集 '$DATASET'。支持 LEVIR-CD、LEVIR-CD256、SYSU-CD、DSIFN-CD、WHU-CD。"
                     exit 1
                     ;;
             esac

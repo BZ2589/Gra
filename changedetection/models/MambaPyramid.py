@@ -87,14 +87,26 @@ class HOI_Fusion_Adapter(nn.Module):
 
     def forward(self, feat_T1, feat_T2):
         orig_dtype = feat_T1.dtype
+        device_type = feat_T1.device.type
 
-        with torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16):
+        if device_type == 'cuda':
+            with torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16):
+                feat_T1 = self.pre_norm_t1(feat_T1)
+                feat_T2 = self.pre_norm_t2(feat_T2)
+                feat_T1 = F.normalize(feat_T1, p=2.0, dim=1, eps=1e-6)
+                feat_T2 = F.normalize(feat_T2, p=2.0, dim=1, eps=1e-6)
+
+                feat_t1_fused, feat_t2_evolved = feat_T1, feat_T2
+                for block in self.hoi_blocks:
+                    feat_t1_fused, feat_t2_evolved = block(feat_t1_fused, feat_t2_evolved, 0, 1)
+
+                hoi_feat = torch.cat([feat_t1_fused, feat_t2_evolved], dim=1)
+        else:
             feat_T1 = self.pre_norm_t1(feat_T1)
             feat_T2 = self.pre_norm_t2(feat_T2)
             feat_T1 = F.normalize(feat_T1, p=2.0, dim=1, eps=1e-6)
             feat_T2 = F.normalize(feat_T2, p=2.0, dim=1, eps=1e-6)
 
-            # 顺序堆叠：上一个 HOI 模块的输出作为下一个的输入
             feat_t1_fused, feat_t2_evolved = feat_T1, feat_T2
             for block in self.hoi_blocks:
                 feat_t1_fused, feat_t2_evolved = block(feat_t1_fused, feat_t2_evolved, 0, 1)
