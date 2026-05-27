@@ -71,8 +71,8 @@ class ChangeDetectionDatset(Dataset):
             post_path = os.path.join(self.dataset_path,'B', self.data_list[index])
             label_path = os.path.join(self.dataset_path, 'label', self.data_list[index])
         if self.dataset_name=='SYSU':
-            pre_path = os.path.join(self.dataset_path, 'time1', self.data_list[index])
-            post_path = os.path.join(self.dataset_path,'time2', self.data_list[index])
+            pre_path = os.path.join(self.dataset_path, 'A', self.data_list[index])
+            post_path = os.path.join(self.dataset_path,'B', self.data_list[index])
             label_path = os.path.join(self.dataset_path, 'label', self.data_list[index])
         if self.dataset_name == 'DSIFN-CD':
             pre_path = os.path.join(self.dataset_path, 't1', self.data_list[index])

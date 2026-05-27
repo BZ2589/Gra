@@ -254,21 +254,39 @@ def main():
     args = parser.parse_args()
 
     if args.dataset=='LEVIR-CD' or args.dataset=='LEVIR-CD+':
-        args.train_data_name_list = os.listdir(os.path.join(args.train_dataset_path,'A'))
-        args.test_data_name_list = os.listdir(os.path.join(args.test_dataset_path,'A'))
+        # LEVIR-CD: train_dataset_path 指向 train/ 子目录，test_dataset_path 指向 test/ 子目录
+        # 图像列表从 A/ 子目录扫描
+        args.train_data_name_list = sorted(os.listdir(os.path.join(args.train_dataset_path,'A')))
+        args.test_data_name_list = sorted(os.listdir(os.path.join(args.test_dataset_path,'A')))
     if args.dataset=='SYSU':
-        args.train_data_name_list = os.listdir(os.path.join(args.train_dataset_path,'time1'))
-        args.test_data_name_list = os.listdir(os.path.join(args.test_dataset_path,'time1'))
-    if args.dataset=='DSIFN-CD':
-        args.train_data_name_list = os.listdir(os.path.join(args.train_dataset_path,'t1'))
-        args.test_data_name_list = os.listdir(os.path.join(args.test_dataset_path,'t1'))
+        # SYSU: 图像在根目录 A/B/label/ 下，训练/测试划分通过 list/ 文件指定
+        # train_dataset_path 和 test_dataset_path 都指向同一个根目录
+        train_list = os.path.join(args.train_dataset_path,'list','train.txt')
+        test_list = os.path.join(args.test_dataset_path,'list','test.txt')
+        with open(train_list,'r') as f:
+            args.train_data_name_list = [l.strip() for l in f.readlines() if l.strip()]
+        if os.path.exists(test_list):
+            with open(test_list,'r') as f:
+                args.test_data_name_list = [l.strip() for l in f.readlines() if l.strip()]
+        else:
+            # fallback: 从 A/ 扫描全部，再去掉训练集
+            all_files = sorted(os.listdir(os.path.join(args.test_dataset_path,'A')))
+            train_set = set(args.train_data_name_list)
+            args.test_data_name_list = [f for f in all_files if f not in train_set]
     if args.dataset == 'WHU-CD':
-        args.train_data_name_list = []
-        args.test_data_name_list = []
-        with open('/home/majiancong/WHU-CD/list/test.txt','r') as f_test:
-            args.test_data_name_list = f_test.read().split('\n')[:-1]
-        with open('/home/majiancong/WHU-CD/list/train.txt','r') as f_test:
-            args.train_data_name_list = f_test.read().split('\n')[:-1]
+        # WHU: 图像在根目录 A/B/label/ 下，训练/测试划分通过 list/ 文件指定
+        # train_dataset_path 和 test_dataset_path 都指向同一个根目录
+        train_list = os.path.join(args.train_dataset_path,'list','train.txt')
+        test_list = os.path.join(args.test_dataset_path,'list','test.txt')
+        with open(train_list,'r') as f:
+            args.train_data_name_list = [l.strip() for l in f.readlines() if l.strip()]
+        if os.path.exists(test_list):
+            with open(test_list,'r') as f:
+                args.test_data_name_list = [l.strip() for l in f.readlines() if l.strip()]
+        else:
+            all_files = sorted(os.listdir(os.path.join(args.test_dataset_path,'A')))
+            train_set = set(args.train_data_name_list)
+            args.test_data_name_list = [f for f in all_files if f not in train_set]
 
     trainer = Trainer(args)
     trainer.training()

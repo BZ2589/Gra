@@ -27,10 +27,19 @@ nohup bash watch_gpu.sh <RUN_NAME> <DATASET> > logs/<RUN_NAME>.log 2>&1 &
 nohup bash watch_gpu.sh levir_exp001 LEVIR-CD > logs/levir_exp001.log 2>&1 &
 
 # SYSU 训练
-nohup bash watch_gpu.sh sysu_base001 SYSU > logs/sysu_base001.log 2>&1 &
+nohup bash watch_gpu.sh sysu_exp001 SYSU > logs/sysu_exp001.log 2>&1 &
 
 # WHU-CD 训练
-nohup bash watch_gpu.sh whu_base001 WHU-CD > logs/whu_base001.log 2>&1 &
+nohup bash watch_gpu.sh whu_exp001 WHU-CD > logs/whu_exp001.log 2>&1 &
+```
+
+### 同时训练多个任务
+
+多个任务可以同时运行，脚本会自动分配不同的 GPU：
+
+```bash
+nohup bash watch_gpu.sh exp001 LEVIR-CD > logs/exp001_levir.log 2>&1 &
+nohup bash watch_gpu.sh exp002 SYSU > logs/exp002_sysu.log 2>&1 &
 ```
 
 ### 日志位置
@@ -59,7 +68,8 @@ python changedetection/script/visualize.py \
 
 **参数说明：**
 - `--resume`: 模型 checkpoint 路径（.pth 文件）
-- `--test_dataset_path`: 测试集根目录（需包含 A/、B/、label/ 或 time1/、time2/、label/ 子目录）
+- `--test_dataset_path`: 测试集根目录
+- `--result_saved_path`: 结果保存路径（默认 ./test_results）
 - `--decoder_depths`: Decoder 深度（默认 4）
 - `--drop_rate`: Dropout 率（默认 0.0）
 
@@ -98,6 +108,6 @@ python cut_results.py test_results/<model_dir> 256
 
 | 数据集 | 目录结构 | 说明 |
 |--------|----------|------|
-| LEVIR-CD | A/ B/ label/ | 1024×1024 遥感变化检测 |
-| SYSU | time1/ time2/ label/ | 需配合 list/test.txt 使用 |
-| WHU-CD | A/ B/ label/ list/ | 建筑物变化检测，需 list/train.txt |
+| LEVIR-CD | train/A/B/label/, test/A/B/label/ | 1024×1024 遥感变化检测 |
+| SYSU | A/B/label/, list/train.txt, list/test.txt | 图像在根目录，list 文件区分训练/测试 |
+| WHU-CD | A/B/label/, list/train.txt, list/test.txt | 图像在根目录，list 文件区分训练/测试 |

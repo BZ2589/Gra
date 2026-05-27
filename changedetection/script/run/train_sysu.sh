@@ -1,14 +1,16 @@
 #!/bin/bash
-GPU_ID=${2:-0}
+# SYSU-CD 训练脚本
+# 由 watch_gpu.sh 调用，GPU 由 watch_gpu.sh 通过 CUDA_VISIBLE_DEVICES 设置
+
 RUN_NAME=${1:-'default_run'}
 
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-CUDA_VISIBLE_DEVICES=$GPU_ID python changedetection/script/train_MambaBCD.py --dataset 'SYSU' \
+python changedetection/script/train_MambaBCD.py --dataset 'SYSU' \
                                 --batch_size 8 \
                                 --crop_size 256 \
                                 --max_iters 400000 \
-                                --model_type baseline_base_sysu_baseline-res101-nods \
+                                --model_type baseline_base_sysu \
                                 --model_param_path 'changedetection/saved_models' \
                                 --train_dataset_path '/home/z/dataset/SYSU-CD' \
                                 --test_dataset_path '/home/z/dataset/SYSU-CD' \
