@@ -90,3 +90,10 @@ visual_results/
 *.tar.gz
 
 **/资料/
+
+# 测试结果与临时大文件
+test_results/
+test_results.zip
+HOIM-results/
+*.log
+sniper_dual.log
