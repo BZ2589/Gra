@@ -101,16 +101,19 @@ class Trainer(object):
     def training(self):
         best_kc = 0.0
         best_round = []
+        best_iter = 0
         torch.cuda.empty_cache()
         elem_num = len(self.train_data_loader)
+        start_time = time.time()
+
         with open(os.path.join(self.model_save_path,'result.txt'),'w') as output:
             output.write(f'best round:{best_round}\n best iter: 0')
-        
+
         # Initialize CSV for logging validation metrics
         csv_path = os.path.join(self.model_save_path, 'metrics.csv')
         with open(csv_path, 'w', newline='') as f:
             f.write('iter,rec,pre,oa,f1_score,iou,kc\n')
-            
+
         train_enumerator = enumerate(self.train_data_loader)
         pbar = tqdm(range(elem_num), disable=not sys.stdout.isatty())
         for _ in pbar:
@@ -129,38 +132,58 @@ class Trainer(object):
                 lovasz_loss = 0
                 for index in range(len(ds_feature)):
                     ce_loss_ds += F.cross_entropy(ds_feature[index], labels, ignore_index=255)*index/4
-                    # 强制在计算 lovasz_loss 前转为 float32，避免底层的 torch.dot 在 fp16 下崩溃
                     lovasz_loss += L.lovasz_softmax(F.softmax(ds_feature[index].float(), dim=1), labels, ignore=255)*index/4
                 lovasz_loss += L.lovasz_softmax(F.softmax(output_1.float(), dim=1), labels, ignore=255)
                 main_loss = ce_loss_1 + 0.75 * lovasz_loss + ce_loss_ds
                 final_loss = main_loss
-                
+
             self.writer.add_scalar(tag="ce_loss",scalar_value=ce_loss_1.item(),global_step=itera+1)
             self.writer.add_scalar(tag="ds_loss",scalar_value=ce_loss_ds.item() if isinstance(ce_loss_ds, torch.Tensor) else ce_loss_ds,global_step=itera+1)
             self.writer.add_scalar(tag="final_loss",scalar_value=final_loss.item(),global_step=itera+1)
-            
+
             self.scaler.scale(final_loss).backward()
             self.scaler.step(self.optim)
             self.scaler.update()
-            
+
             if (itera + 1) % 10 == 0:
                 pbar.set_postfix({'loss': f'{final_loss.item():.4f}'})
-                if (itera + 1) % 500 == 0:
-                    self.deep_model.eval()
-                    rec, pre, oa, f1_score, iou, kc = self.validation(iter=itera)
-                    
-                    # Log metrics to CSV
-                    with open(csv_path, 'a', newline='') as f:
-                        f.write(f'{itera + 1},{rec},{pre},{oa},{f1_score},{iou},{kc}\n')
-                        
-                    if kc > best_kc:
-                        torch.save(self.deep_model.state_dict(),
-                                   os.path.join(self.model_save_path, f'{itera + 1}_model.pth'))
-                        best_iter = itera+1
-                        best_kc = kc
-                        best_round = [rec, pre, oa, f1_score, iou, kc]
-                    print('best round:',best_round)
-                    print('best iteration:',best_iter)
+
+            if (itera + 1) % 500 == 0:
+                # 计算剩余时间
+                elapsed_time = time.time() - start_time
+                avg_time_per_iter = elapsed_time / (itera + 1)
+                eta_seconds = avg_time_per_iter * (elem_num - (itera + 1))
+                eta_str = time.strftime("%H:%M:%S", time.gmtime(eta_seconds))
+                print(f"当前迭代: {itera + 1}/{elem_num}, 预计剩余时间: {eta_str}")
+
+                self.deep_model.eval()
+                rec, pre, oa, f1_score, iou, kc = self.validation(iter=itera)
+
+                # Log metrics to CSV
+                with open(csv_path, 'a', newline='') as f:
+                    f.write(f'{itera + 1},{rec},{pre},{oa},{f1_score},{iou},{kc}\n')
+
+                if kc > best_kc:
+                    # 删除旧的最优模型
+                    if best_iter > 0:
+                        old_model_path = os.path.join(self.model_save_path, f'{best_iter}_model.pth')
+                        if os.path.exists(old_model_path):
+                            os.remove(old_model_path)
+
+                    torch.save(self.deep_model.state_dict(),
+                               os.path.join(self.model_save_path, f'{itera + 1}_model.pth'))
+                    best_iter = itera + 1
+                    best_kc = kc
+                    best_round = [rec, pre, oa, f1_score, iou, kc]
+                    print('✅ 新的最优模型已保存，删除旧模型')
+                print('best round:',best_round)
+                print('best iteration:',best_iter)
+                with open(os.path.join(self.model_save_path,'result.txt'),'w') as output:
+                    output.write(f'best round:{best_round}\n best iter: {best_iter}')
+                self.deep_model.train()
+        self.writer.close()
+        print('The accuracy of the best round is ', best_round)
+        print('best iteration:',best_iter)
                     with open(os.path.join(self.model_save_path,'result.txt'),'w') as output:
                         output.write(f'best round:{best_round}\n best iter: {best_iter}')
                     self.deep_model.train()
