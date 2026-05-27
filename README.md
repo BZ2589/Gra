@@ -6,6 +6,14 @@
 - **CUDA**: 12.8
 - **Python**: 3.10+
 
+## SSH 连接
+
+```bash
+ssh z@10.59.85.10
+cd /media/z/1d115f79-c4ea-4c62-9376-98541627908c/LH/Gra
+conda activate lh
+```
+
 ## 训练
 
 使用 GPU 自动监控训练，脚本会自动扫描空闲 GPU 并启动训练，日志按数据集分别存放。
@@ -18,13 +26,17 @@ nohup bash watch_gpu.sh <RUN_NAME> <DATASET> > logs/<RUN_NAME>.log 2>&1 &
 
 **参数说明：**
 - `RUN_NAME`: 训练名称（用于区分不同实验）
-- `DATASET`: 数据集名称（LEVIR-CD / SYSU / WHU-CD）
+- `DATASET`: 数据集名称（LEVIR-CD / LEVIR-CD256 / SYSU / WHU-CD）
+- 不指定 GPU_ID，脚本自动扫描 0/1 号显卡
 
 ### 示例
 
 ```bash
 # LEVIR-CD 训练
 nohup bash watch_gpu.sh levir_exp001 LEVIR-CD > logs/levir_exp001.log 2>&1 &
+
+# LEVIR-CD256 训练
+nohup bash watch_gpu.sh levircd256_exp001 LEVIR-CD256 > logs/levircd256_exp001.log 2>&1 &
 
 # SYSU 训练
 nohup bash watch_gpu.sh sysu_exp001 SYSU > logs/sysu_exp001.log 2>&1 &
@@ -47,6 +59,7 @@ nohup bash watch_gpu.sh exp002 SYSU > logs/exp002_sysu.log 2>&1 &
 | 数据集 | 日志路径 |
 |--------|----------|
 | LEVIR-CD | `logs/{RUN_NAME}_levir.log` |
+| LEVIR-CD256 | `logs/{RUN_NAME}_levir256.log` |
 | SYSU | `logs/{RUN_NAME}_sysu.log` |
 | WHU-CD | `logs/{RUN_NAME}_whu.log` |
 
@@ -58,32 +71,63 @@ tail -f logs/levir_exp001.log
 
 ## 可视化与评估
 
-训练完成后，使用 `visualize.py` 对测试集进行推理和评估：
+推理脚本：`changedetection/script/visualize.py`
+
+### 测试命令
 
 ```bash
+# LEVIR-CD-1024
 python changedetection/script/visualize.py \
-    --resume <checkpoint_path> \
-    --test_dataset_path <test_dataset_root>
+    --resume 'changedetection/saved_models/LEVIR-CD/{model_folder}/{iter}_model.pth' \
+    --test_dataset_path '/home/z/dataset/LEVIR-CD-1024/test'
+
+# LEVIR-CD256（用 LEVIR-CD-1024 训练的模型直接测试）
+python changedetection/script/visualize.py \
+    --resume 'changedetection/saved_models/LEVIR-CD/{model_folder}/{iter}_model.pth' \
+    --test_dataset_path '/home/z/dataset/LEVIR-CD256'
+
+# SYSU-CD
+python changedetection/script/visualize.py \
+    --resume 'changedetection/saved_models/SYSU/{model_folder}/{iter}_model.pth' \
+    --test_dataset_path '/home/z/dataset/SYSU-CD/'
+
+# WHU-CD
+python changedetection/script/visualize.py \
+    --resume 'changedetection/saved_models/WHU-CD/{model_folder}/{iter}_model.pth' \
+    --test_dataset_path '/home/z/dataset/WHU-CD-256/'
 ```
 
-**参数说明：**
-- `--resume`: 模型 checkpoint 路径（.pth 文件）
-- `--test_dataset_path`: 测试集根目录
-- `--result_saved_path`: 结果保存路径（默认 ./test_results）
-- `--decoder_depths`: Decoder 深度（默认 4）
-- `--drop_rate`: Dropout 率（默认 0.0）
+### 参数说明
 
-**示例：**
+| 参数 | 说明 |
+|---|---|
+| `--resume` | 训练好的 checkpoint `.pth` 文件路径 |
+| `--test_dataset_path` | 测试数据根目录 |
+| `--result_saved_path` | 输出根目录，默认 `./test_results` |
+| `--decoder_depths` | Decoder 深度，默认 `4` |
+| `--drop_rate` | Dropout 率，默认 `0.0` |
 
-```bash
-python changedetection/script/visualize.py \
-    --resume changedetection/saved_models/LEVIR-CD/exp001/49000_model.pth \
-    --test_dataset_path /home/z/dataset/LEVIR-CD-1024/test
+### 输出目录结构
+
+```
+test_results/
+  {model_name}/
+    {sample_name}/
+      T1.png         # 原始时相1图像
+      T2.png         # 原始时相2图像
+      label.png      # 黑白二值标签（0=无变化，255=有变化）
+      prediction.png # 黑白二值预测（0=无变化，255=有变化）
+      color_map.png  # 彩色分析图
 ```
 
-**输出：**
-- 每个样本独立文件夹，包含 T1.png、T2.png、label.png、prediction.png、color_map.png
-- 评估指标：Recall、Precision、OA、F1、IoU、Kappa
+### color_map 颜色含义
+
+| 颜色 | 含义 | 条件 |
+|---|---|---|
+| 白色 | TP（真正例） | 预测有变化，实际有变化 |
+| 黑色 | TN（真负例） | 预测无变化，实际无变化 |
+| 红色 | FP（假正例） | 预测有变化，实际无变化（误检） |
+| 绿色 | FN（假负例） | 预测无变化，实际有变化（漏检） |
 
 ### 裁剪结果
 
@@ -91,6 +135,25 @@ python changedetection/script/visualize.py \
 
 ```bash
 python cut_results.py test_results/<model_dir> 256
+```
+
+### 数据集目录结构要求
+
+```
+# LEVIR-CD-1024（train/test/val 分层）
+dataset_root/
+  test/
+    A/      # 时相1
+    B/      # 时相2
+    label/  # 标签
+
+# LEVIR-CD256 / SYSU-CD / WHU-CD（A/B/label 根目录 + list 划分）
+dataset_root/
+  A/
+  B/
+  label/
+  list/
+    test.txt
 ```
 
 ## 模型参数
@@ -109,5 +172,6 @@ python cut_results.py test_results/<model_dir> 256
 | 数据集 | 目录结构 | 说明 |
 |--------|----------|------|
 | LEVIR-CD | train/A/B/label/, test/A/B/label/ | 1024×1024 遥感变化检测 |
+| LEVIR-CD256 | A/B/label/, list/test.txt | 256×256 裁剪版本 |
 | SYSU | A/B/label/, list/train.txt, list/test.txt | 图像在根目录，list 文件区分训练/测试 |
 | WHU-CD | A/B/label/, list/train.txt, list/test.txt | 图像在根目录，list 文件区分训练/测试 |

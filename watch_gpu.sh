@@ -17,10 +17,14 @@ DATASET=$2
 CHECK_INTERVAL=120  # 每 120 秒扫一次
 
 # 根据数据集选择训练脚本和日志前缀
-case "$DATASET" in
+    case "$DATASET" in
     LEVIR-CD|LEVIR-CD+)
         SCRIPT="changedetection/script/run/train_levircd.sh"
         LOG_PREFIX="levir"
+        ;;
+    LEVIR-CD256)
+        SCRIPT="changedetection/script/run/train_levircd256.sh"
+        LOG_PREFIX="levir256"
         ;;
     SYSU|SYSU-CD)
         SCRIPT="changedetection/script/run/train_sysu.sh"
@@ -31,7 +35,7 @@ case "$DATASET" in
         LOG_PREFIX="whu"
         ;;
     *)
-        echo "❌ 错误：不支持的数据集 '$DATASET'。支持 LEVIR-CD、SYSU、WHU-CD。"
+        echo "❌ 错误：不支持的数据集 '$DATASET'。支持 LEVIR-CD、LEVIR-CD256、SYSU、WHU-CD。"
         exit 1
         ;;
 esac

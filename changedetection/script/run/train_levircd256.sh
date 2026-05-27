@@ -1,10 +1,12 @@
 #!/bin/bash
-GPU_ID=${2:-0}
+# LEVIR-CD256 训练脚本
+# 由 watch_gpu.sh 调用，GPU 由 watch_gpu.sh 通过 CUDA_VISIBLE_DEVICES 设置
+
 RUN_NAME=${1:-'default_run'}
 
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-CUDA_VISIBLE_DEVICES=$GPU_ID python changedetection/script/train_MambaBCD.py --dataset 'LEVIR-CD' \
+python changedetection/script/train_MambaBCD.py --dataset 'LEVIR-CD' \
                                 --batch_size 8 \
                                 --crop_size 256 \
                                 --max_iters 800000 \
