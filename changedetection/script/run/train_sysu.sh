@@ -8,4 +8,4 @@ python script/train_MambaBCD.py --dataset 'SYSU' \
                                 --test_dataset_path '/home/majiancong/data/SYSU/test' \
                                 --cfg '/home/majiancong/MambaCD/changedetection/configs/vssm1/vssm_base_224.yaml' \
                                 --decoder_depths 4 \
-                                --pretrained_weight_path '/home/majiancong/MambaCD/changedetection/vssm_base_0229_ckpt_epoch_237.pth' \
+                                --pretrained_weight_path '/home/majiancong/MambaCD/changedetection/vssm_base_0229_ckpt_epoch_237.pth'
