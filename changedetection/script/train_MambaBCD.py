@@ -184,12 +184,6 @@ class Trainer(object):
         self.writer.close()
         print('The accuracy of the best round is ', best_round)
         print('best iteration:',best_iter)
-                    with open(os.path.join(self.model_save_path,'result.txt'),'w') as output:
-                        output.write(f'best round:{best_round}\n best iter: {best_iter}')
-                    self.deep_model.train()
-        self.writer.close()
-        print('The accuracy of the best round is ', best_round)
-        print('best iteration:',best_iter)
 
     def validation(self,iter):
         print('---------starting evaluation-----------')
