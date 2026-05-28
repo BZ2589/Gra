@@ -44,7 +44,7 @@ nohup bash watch_gpu.sh sysu_exp001 SYSU > logs/sysu_exp001.log 2>&1 &
 # WHU-CD 训练
 nohup bash watch_gpu.sh whu_exp001 WHU-CD > logs/whu_exp001.log 2>&1 &
 ```
-
+tail -f logs/sysu_exp001.log
 ### 同时训练多个任务
 
 多个任务可以同时运行，脚本会自动分配不同的 GPU：
@@ -78,22 +78,22 @@ tail -f logs/levir_exp001.log
 ```bash
 # LEVIR-CD-1024
 python changedetection/script/visualize.py \
-    --resume 'changedetection/saved_models/LEVIR-CD/{model_folder}/{iter}_model.pth' \
+    --resume 'changedetection/saved_models/LEVIR-CD/baseline_base_levir_drop=0_levircd_base003/90500_model.pth' \
     --test_dataset_path '/home/z/dataset/LEVIR-CD-1024/test'
 
 # LEVIR-CD256（用 LEVIR-CD-1024 训练的模型直接测试）
 python changedetection/script/visualize.py \
-    --resume 'changedetection/saved_models/LEVIR-CD/{model_folder}/{iter}_model.pth' \
+    --resume 'changedetection/saved_models/LEVIR-CD/baseline_base_levir_drop=0_levircd_base003/90500_model.pth' \
     --test_dataset_path '/home/z/dataset/LEVIR-CD256'
 
 # SYSU-CD
 python changedetection/script/visualize.py \
-    --resume 'changedetection/saved_models/SYSU/{model_folder}/{iter}_model.pth' \
+    --resume 'changedetection/saved_models/SYSU/baseline_base_sysu_sysu_exp001/40000_model.pth' \
     --test_dataset_path '/home/z/dataset/SYSU-CD/'
 
 # WHU-CD
 python changedetection/script/visualize.py \
-    --resume 'changedetection/saved_models/WHU-CD/{model_folder}/{iter}_model.pth' \
+    --resume 'changedetection/saved_models/WHU-CD/baseline_base_whu_whu_exp001/36500_model.pth' \
     --test_dataset_path '/home/z/dataset/WHU-CD-256/'
 ```
 
