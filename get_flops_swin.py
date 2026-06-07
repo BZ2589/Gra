@@ -1,11 +1,13 @@
 import sys
 import os
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import torch
 import argparse
 from changedetection.models.SwinPyramid import SwinPyramid
 from changedetection.configs.config import get_config
+from fvcore.nn import FlopCountAnalysis
+import timm
 
 def main():
     parser = argparse.ArgumentParser()
@@ -14,7 +16,17 @@ def main():
     args = parser.parse_args()
     config = get_config(args)
 
-    print("正在实例化 SwinPyramid 网络架构...")
+    print("正在实例化 SwinPyramid (Transformer Baseline) 网络架构...")
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # Debug: check Swin feature info
+    _swin = timm.create_model('swin_tiny_patch4_window7_224', pretrained=False, features_only=True, img_size=256)
+    print(f"Swin feature_info channels: {_swin.feature_info.channels()}")
+    _swin.eval()
+    _test = torch.randn(1, 3, 256, 256)
+    _feats = _swin(_test)
+    for ii, ff in enumerate(_feats):
+        print(f"  Stage {ii}: shape={ff.shape}")
+
     model = SwinPyramid(
         pretrained=None,
         hoi_levels=[1, 1, 1, 1],
@@ -47,19 +59,27 @@ def main():
         patchembed_version=config.MODEL.VSSM.PATCHEMBED,
         gmlp=config.MODEL.VSSM.GMLP,
         use_checkpoint=False
-    ).cuda()
+    ).to(device)
     model.eval()
 
-    dummy_input1 = torch.randn(1, 3, 256, 256).cuda()
-    dummy_input2 = torch.randn(1, 3, 256, 256).cuda()
+    dummy_input1 = torch.randn(1, 3, 256, 256).to(device)
+    dummy_input2 = torch.randn(1, 3, 256, 256).to(device)
 
     print("="*40)
     total_params = sum(p.numel() for p in model.parameters())
-    print(f"  Params:  {total_params / 1e6:.2f} M")
+    print(f"  原生Transformer 真实参数量 Params:  {total_params / 1e6:.2f} M")
 
-    from thop import profile
-    flops, _ = profile(model, inputs=(dummy_input1, dummy_input2), verbose=False)
-    print(f"  FLOPs (thop):   {flops / 1e9:.2f} G")
+    print("开始计算计算量 FLOPs (此过程可能需要几十秒，请耐心等待)...")
+    try:
+        with torch.amp.autocast('cuda'):
+            flops = FlopCountAnalysis(model, (dummy_input1, dummy_input2))
+            flops.unsupported_ops_warnings(False)
+            flops.uncalled_modules_warnings(False)
+
+            total_flops = flops.total()
+            print(f"  原生Transformer 计算量 FLOPs:      {total_flops / 1e9:.2f} G")
+    except Exception as e:
+        print(f"计算 FLOPs 失败: {e}")
     print("="*40)
 
 if __name__ == "__main__":

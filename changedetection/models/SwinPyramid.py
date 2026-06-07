@@ -7,21 +7,39 @@ from changedetection.models.MDP import Mamba_Decoder_Pyramid
 
 
 class Backbone_Swin(nn.Module):
-    def __init__(self, out_indices=(0, 1, 2, 3), pretrained=None, **kwargs):
+    def __init__(self, out_indices=(0, 1, 2, 3), pretrained=None, target_dims=None, **kwargs):
         super().__init__()
         self.out_indices = out_indices
         self.backbone = timm.create_model(
             'swin_tiny_patch4_window7_224',
             pretrained=pretrained,
-            features_only=True
+            features_only=True,
+            img_size=256
         )
         self.channel_first = True
-        self.dims = [self.backbone.feature_info.channels()[i] for i in out_indices]
+        swin_channels = [self.backbone.feature_info.channels()[i] for i in out_indices]
+
+        if target_dims is not None:
+            self.proj = nn.ModuleList([
+                nn.Conv2d(swin_channels[i], target_dims[i], 1)
+                for i in range(len(out_indices))
+            ])
+            self.dims = list(target_dims)
+        else:
+            self.proj = None
+            self.dims = swin_channels
         self.out_indices = list(out_indices)
 
     def forward(self, x):
         features = self.backbone(x)
-        return [features[i] for i in self.out_indices]
+        out = []
+        for i, idx in enumerate(self.out_indices):
+            f = features[idx]
+            if self.proj is not None:
+                f = f.permute(0, 3, 1, 2).contiguous()
+                f = self.proj[i](f)
+            out.append(f)
+        return out
 
 
 class SwinPyramid(nn.Module):
@@ -30,12 +48,13 @@ class SwinPyramid(nn.Module):
         self.encoder = Backbone_Swin(
             out_indices=(0, 1, 2, 3),
             pretrained=pretrained,
+            target_dims=[128, 256, 512, 1024],
             **kwargs
         )
 
         _NORMLAYERS = dict(
             ln=nn.LayerNorm,
-            ln2d=nn.LayerNorm2d,
+            ln2d=LayerNorm2d,
             bn=nn.BatchNorm2d,
         )
 
@@ -72,7 +91,9 @@ class SwinPyramid(nn.Module):
         post_features = self.encoder(post_data)
         feature = []
         for index in range(len(pre_features)):
-            feature.append(torch.cat([pre_features[index], post_features[index]], dim=1))
+            pre_f = pre_features[index]
+            post_f = post_features[index]
+            feature.append(torch.cat([pre_f, post_f], dim=1))
         output, output_ds = self.decoder(feature)
         output = self.main_clf(output)
         for i in range(self.depth - 1):
