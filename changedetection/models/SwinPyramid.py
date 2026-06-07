@@ -73,7 +73,7 @@ class SwinPyramid(nn.Module):
         clean_kwargs = {k: v for k, v in kwargs.items() if k not in ['norm_layer', 'ssm_act_layer', 'mlp_act_layer']}
         self.decoder = Mamba_Decoder_Pyramid(
             encoder_dims=self.encoder.dims,
-            channel_first=self.encoder.channel_first,
+            channel_first=False,
             norm_layer=norm_layer,
             ssm_act_layer=ssm_act_layer,
             mlp_act_layer=mlp_act_layer,
