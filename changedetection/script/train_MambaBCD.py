@@ -38,16 +38,6 @@ class Trainer(object):
         print(f"HOI_ORDER (阶数)    = {hoi_order}")
         print(f"HOI_LAYERS (堆叠)   = {hoi_layers}")
 
-        # ==================== 模型复杂度统计 ====================
-        self.deep_model.eval()
-        dummy_input = torch.randn(1, 3, 256, 256).cuda()
-        flops, params = profile(self.deep_model, inputs=(dummy_input, dummy_input), verbose=False)
-        print(f"Model Complexity:")
-        print(f"  Params:  {params / 1e6:.2f} M")
-        print(f"  FLOPs:   {flops / 1e9:.2f} G")
-        self.deep_model.train()
-        # =====================================================
-
         # 初始化验证集loader
         val_dataset = ChangeDetectionDatset(args.dataset, args.test_dataset_path, args.test_data_name_list, 256, None, 'test')
         self.val_data_loader = DataLoader(val_dataset, batch_size=1, num_workers=8, pin_memory=True, drop_last=False)
@@ -93,6 +83,16 @@ class Trainer(object):
             ) 
         
         self.deep_model = self.deep_model.cuda()
+
+        # ==================== 模型复杂度统计 ====================
+        self.deep_model.eval()
+        dummy_input = torch.randn(1, 3, 256, 256).cuda()
+        flops, params = profile(self.deep_model, inputs=(dummy_input, dummy_input), verbose=False)
+        print(f"Model Complexity:")
+        print(f"  Params:  {params / 1e6:.2f} M")
+        print(f"  FLOPs:   {flops / 1e9:.2f} G")
+        self.deep_model.train()
+        # =====================================================
 
         # Build save path with train_name if provided, else use timestamp
         save_suffix = args.train_name if args.train_name else str(time.time())
