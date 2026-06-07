@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 import timm
+from classification.models.vmamba import LayerNorm2d
 from changedetection.models.MDP import Mamba_Decoder_Pyramid
 
 
