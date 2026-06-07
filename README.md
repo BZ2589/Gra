@@ -65,7 +65,7 @@ nohup bash watch_gpu.sh myrun WHU-CD > sniper_dual.log 2>&1 &
 ```
 nohup bash watch_gpu.sh whucd001 WHU-CD > sniper_dual.log 2>&1 &
 
-nohup bash watch_gpu.sh levircd256_base001 LEVIR-CD256 > sniper_dual.log 2>&1 &
+nohup bash watch_gpu.sh levircd_traindata LEVIR-CD > sniper_dual.log 2>&1 &
 
 tail -f sniper_dual.log
 
