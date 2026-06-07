@@ -91,6 +91,7 @@ class Trainer(object):
         print(f"Model Complexity:")
         print(f"  Params:  {params / 1e6:.2f} M")
         print(f"  FLOPs:   {flops / 1e9:.2f} G")
+        sys.stdout.flush()
         self.deep_model.train()
         # =====================================================
 
