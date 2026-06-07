@@ -11,7 +11,7 @@ from fvcore.nn import FlopCountAnalysis
 def main():
     parser = argparse.ArgumentParser()
     # 运行时可以根据需要将其替换为 vssm_tiny_224.yaml 以获取轻量级对比数据
-    parser.add_argument('--cfg', type=str, default='./changedetection/configs/vssm1/vssm_base_224.yaml')
+    parser.add_argument('--cfg', type=str, default='./changedetection/configs/vssm1/vssm_tiny_224.yaml')
     parser.add_argument("--opts", default=None, nargs='+')
     args = parser.parse_args()
     config = get_config(args)
