@@ -12,7 +12,7 @@ def main():
     parser = argparse.ArgumentParser()
     # ⚠️ 注意：如果你需要复现论文表4-11中 22.3M 的参数量，
     # 请确认此处是否应该替换为 tiny 版本的 yaml 配置文件！
-    parser.add_argument('--cfg', type=str, default='./changedetection/configs/vssm1/vssm_base_224.yaml')
+    parser.add_argument('--cfg', type=str, default='./changedetection/configs/vssm1/vssm_tiny_224.yaml')
     parser.add_argument("--opts", default=None, nargs='+')
     args = parser.parse_args()
     config = get_config(args)
