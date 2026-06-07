@@ -84,17 +84,6 @@ class Trainer(object):
         
         self.deep_model = self.deep_model.cuda()
 
-        # ==================== 模型复杂度统计 ====================
-        self.deep_model.eval()
-        dummy_input = torch.randn(1, 3, 256, 256).cuda()
-        flops, params = profile(self.deep_model, inputs=(dummy_input, dummy_input), verbose=False)
-        print(f"Model Complexity:")
-        print(f"  Params:  {params / 1e6:.2f} M")
-        print(f"  FLOPs:   {flops / 1e9:.2f} G")
-        sys.stdout.flush()
-        self.deep_model.train()
-        # =====================================================
-
         # Build save path with train_name if provided, else use timestamp
         save_suffix = args.train_name if args.train_name else str(time.time())
         self.model_save_path = os.path.join(args.model_param_path, args.dataset,
