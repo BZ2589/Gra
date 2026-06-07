@@ -1,19 +1,26 @@
 import sys
 import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import torch
 import argparse
 from changedetection.models.MambaPyramid import MambaPyramid
 from changedetection.configs.config import get_config
+from fvcore.nn import FlopCountAnalysis
 
 def main():
     parser = argparse.ArgumentParser()
+    # ⚠️ 注意：如果你需要复现论文表4-11中 22.3M 的参数量，
+    # 请确认此处是否应该替换为 tiny 版本的 yaml 配置文件！
     parser.add_argument('--cfg', type=str, default='./changedetection/configs/vssm1/vssm_base_224.yaml')
     parser.add_argument("--opts", default=None, nargs='+')
     args = parser.parse_args()
     config = get_config(args)
 
     print("正在实例化网络架构...")
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Using device: {device}")
+
     model = MambaPyramid(
         pretrained=None,
         hoi_levels=[1, 1, 1, 1],
@@ -46,25 +53,29 @@ def main():
         patchembed_version=config.MODEL.VSSM.PATCHEMBED,
         gmlp=config.MODEL.VSSM.GMLP,
         use_checkpoint=False
-    ).cuda()
+    ).to(device)
     model.eval()
 
-    dummy_input1 = torch.randn(1, 3, 256, 256).cuda()
-    dummy_input2 = torch.randn(1, 3, 256, 256).cuda()
+    dummy_input1 = torch.randn(1, 3, 256, 256).to(device)
+    dummy_input2 = torch.randn(1, 3, 256, 256).to(device)
 
     print("="*40)
     total_params = sum(p.numel() for p in model.parameters())
-    print(f"  Params:  {total_params / 1e6:.2f} M")
+    print(f"  真实参数量 Params:  {total_params / 1e6:.2f} M")
 
+    print("开始计算计算量 FLOPs (此过程可能需要几十秒，请耐心等待)...")
     try:
-        from fvcore.nn import FlopCountAnalysis
-        flops = FlopCountAnalysis(model, (dummy_input1, dummy_input2))
-        print(f"  FLOPs (fvcore): {flops.total() / 1e9:.2f} G")
-    except ImportError:
-        print("未检测到 fvcore 库 (可通过 pip install fvcore 安装)，退回使用 thop 计算...")
-        from thop import profile
-        flops, _ = profile(model, inputs=(dummy_input1, dummy_input2), verbose=False)
-        print(f"  FLOPs (thop):   {flops / 1e9:.2f} G")
+        # 使用混合精度上下文环境，防止大参数量下 4090 的 CUBLAS 状态异常
+        with torch.amp.autocast('cuda'):
+            flops = FlopCountAnalysis(model, (dummy_input1, dummy_input2))
+            # 关闭部分无用警告以保持输出整洁
+            flops.unsupported_ops_warnings(False)
+            flops.uncalled_modules_warnings(False)
+            
+            total_flops = flops.total()
+            print(f"  计算量 FLOPs:      {total_flops / 1e9:.2f} G")
+    except Exception as e:
+        print(f"计算 FLOPs 失败: {e}")
     print("="*40)
 
 if __name__ == "__main__":
